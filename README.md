@@ -1,7 +1,7 @@
 # OpenWSV - BenchMark
 
 > **Open World State Verification Benchmark for Multimodal AI**  
-> 专为 **StarLife-1-WSV 具身世界大模型** 体系深度定制的前沿多模态世界状态验证、3D 空间拓扑与物理因果评测平台。  
+> 专为 **具身世界大模型** 体系深度定制的前沿多模态世界状态验证、3D 空间拓扑与物理因果评测平台。  
 > 开发者：**StarLife AI**（西安花濑科技）
 
 ![Vue 3](https://img.shields.io/badge/Vue-3.5-brightgreen.svg)
