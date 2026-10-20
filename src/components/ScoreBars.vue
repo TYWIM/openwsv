@@ -20,6 +20,23 @@ const METRICS: MetricOption[] = [
   { key: 'state_consistency', label: '状态一致性' },
 ];
 
+/** 图下口径说明：跟随当前指标，逐字固定文案。 */
+const METRIC_NOTES: Record<MetricKey, string> = {
+  composite: '综合分 = 7 项等权平均（0-100，缺项剔除）；切换上方指标可看各维度单项分数。',
+  change_top1:
+    '变化识别：两帧之间每个物体发生了什么（出现/消失/被挪动/没变），逐个物体判对的比例；要和「变化平衡」一起看，防止模型全猜"没变"。',
+  change_balance:
+    '变化平衡：变化类别的宏平均 F1（没有变化/出现/位移/消失四类等权）；越接近变化识别分说明各类变化判得越均衡。',
+  relation_type:
+    '关系类型：两个物体属于哪一类空间关系（11 类）；必须先匹配到同一对物体，关系类型判对才算对。',
+  rel_pos: '空间方位：在关系类型判对的关系对上，前/后/左/右/上/下说得对不对。',
+  attrs: '接触支撑：关系上「是否接触」「是否互相支撑」两项布尔判断的准确率均值。',
+  event_f1:
+    '事件F1：把判断写成结构化事件流后，只统计所有模型都能产出的两类事件，查准率与查全率的调和平均。',
+  state_consistency:
+    '状态一致性：用预测的变化与关系回放重建 after 帧状态，与真实状态在存在/类型/关系/属性四个维度的一致率均值（类型维度仅本地头有，不计入云端）。',
+};
+
 const props = withDefaults(
   defineProps<{
     models: ModelResult[];
@@ -145,6 +162,8 @@ const legendFamilies = computed(() => {
 
 const activeKey = computed(() => activeMetric.value);
 
+const activeNote = computed(() => METRIC_NOTES[activeMetric.value]);
+
 const legendLabel = (entry: { name: string; count: number }): string =>
   entry.count > 1 ? `${entry.name}(×${entry.count})` : entry.name;
 </script>
@@ -257,8 +276,11 @@ const legendLabel = (entry: { name: string; count: number }): string =>
       </span>
     </div>
 
-    <p data-chart-note class="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-      综合分 = 7 项等权平均（0-100，缺项剔除）；切换上方指标可看各维度单项分数。
+    <p
+      data-chart-note
+      class="mt-2 min-h-[2.75rem] text-[12px] leading-relaxed text-muted-foreground"
+    >
+      {{ activeNote }}
     </p>
   </section>
 </template>
