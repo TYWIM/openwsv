@@ -75,19 +75,20 @@
         }
       ],
       "note": "总分依赖权重；这里用等权并公开逐维分数，任何人都能按自己的场景重算。"
-    }
+    },
+    "mixedDataNote": "starlife-v3-wsv row is a 60-pair sample drawn from dataset_spatial_v3 (v3 heads, slot-geometry features); all other rows are the v1.4 60-pair sample from dataset_spatial_v2."
   },
   "models": [
     {
-      "id": "starlife-v1-wsv",
-      "name": "starlife-v1-wsv",
+      "id": "starlife-v3-wsv",
+      "name": "starlife-v3-wsv",
       "family": "StarLife",
       "provider": "StarLife AI",
       "providerColor": "var(--color-starlife)",
       "mode": "LOCAL-HEADS",
-      "compositeScore": 83.7,
+      "compositeScore": 95.2,
       "composite": {
-        "score": 83.7,
+        "score": 95.2,
         "method": "equal-weight",
         "formula": "7 个维度（0-100）等权平均；缺项自动从分母剔除，不当 0 分",
         "weights": [
@@ -107,7 +108,7 @@
             "key": "change_top1",
             "group": "变化识别",
             "label": "变化识别 top1",
-            "value": 92.8,
+            "value": 99.7,
             "source": "pair_protocol.change_top1",
             "available": true
           },
@@ -115,7 +116,7 @@
             "key": "change_balance",
             "group": "变化平衡性",
             "label": "变化平衡性 (macroF1)",
-            "value": 66.3,
+            "value": 99.4,
             "source": "pair_protocol.change_macro_f1",
             "available": true
           },
@@ -123,7 +124,7 @@
             "key": "relation_type",
             "group": "关系类型",
             "label": "关系类型准确率",
-            "value": 90.9,
+            "value": 92.2,
             "source": "pair_protocol.relation_type_acc",
             "available": true
           },
@@ -131,7 +132,7 @@
             "key": "rel_pos",
             "group": "空间方位",
             "label": "空间方位准确率",
-            "value": 71.2,
+            "value": 83.7,
             "source": "pair_protocol.rel_pos_acc",
             "available": true
           },
@@ -139,7 +140,7 @@
             "key": "attrs",
             "group": "接触支撑",
             "label": "接触/支撑准确率",
-            "value": 97.2,
+            "value": 99.0,
             "source": "pair_protocol.attrs_acc",
             "available": true
           },
@@ -147,7 +148,7 @@
             "key": "event_f1",
             "group": "事件级 F1",
             "label": "事件级 F1",
-            "value": 75.4,
+            "value": 96.6,
             "source": "event_metrics.macro_f1_common",
             "available": true
           },
@@ -155,7 +156,7 @@
             "key": "state_consistency",
             "group": "世界状态一致性",
             "label": "世界状态一致性",
-            "value": 92.4,
+            "value": 95.9,
             "source": "state_replay.state_acc_common",
             "available": true
           }
@@ -167,48 +168,48 @@
           "attrs"
         ]
       },
-      "score": 75.4,
-      "topologyF1": 90.9,
-      "affordanceAcc": 97.2,
-      "stateTransitionAcc": 92.8,
+      "score": 96.6,
+      "topologyF1": 92.2,
+      "affordanceAcc": 99.0,
+      "stateTransitionAcc": 99.7,
       "latency": 1716.8,
       "confidence": null,
       "version": "v1.3",
       "isBest": true,
       "metrics": {
         "head": {
-          "change_top1": 0.936480686695279,
-          "change_macro_f1": 0.7232061548123724,
-          "relation_top1": 0.7934306569343066,
-          "relation_macro_f1": 0.7863756305369575,
-          "rel_pos_top1": 0.6878402903811253,
-          "rel_pos_macro_f1": 0.5376312161610561,
-          "attrs_contact_f1": 0.887705265371898,
-          "attrs_support_f1": 0.8694761898480179,
-          "attrs": 0.8785907276099579
+          "change_top1": 0.9972598047610892,
+          "change_macro_f1": 0.9947852553931811,
+          "relation_top1": 0.9069591527987897,
+          "relation_macro_f1": 0.8734534428056616,
+          "rel_pos_top1": 0.8631970260223049,
+          "rel_pos_macro_f1": 0.8122121808758681,
+          "attrs_contact_f1": 0.9548341517007645,
+          "attrs_support_f1": 0.9664900625230186,
+          "attrs": 0.9606621071118915
         },
         "pair": {
-          "change_top1": 0.928,
-          "change_macro_f1": 0.6628,
-          "relation_type_acc": 0.9091,
-          "rel_pos_acc": 0.7125,
-          "attrs_acc": 0.9719
+          "change_top1": 0.9972,
+          "change_macro_f1": 0.994,
+          "relation_type_acc": 0.9217,
+          "rel_pos_acc": 0.8366,
+          "attrs_acc": 0.9902
         },
         "event": {
-          "macro_f1": 0.5694656994269436,
-          "macro_f1_common": 0.7541985491404154,
+          "macro_f1": 0.9660059011140468,
+          "macro_f1_common": 0.9656755183377368,
           "common_kinds": [
             "StateChanged",
             "RelationAdded"
           ],
-          "matched_total": 197,
+          "matched_total": 250,
           "available_kinds": [
             "EntityCreated",
             "StateChanged",
             "RelationAdded"
           ]
         },
-        "state": 0.9333932378183276
+        "state": 0.9662875160697088
       },
       "na": {}
     },
