@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>OpenWSV - BenchMark | World State & Spatial Topology Evaluation</title>
+    <meta name="description" content="Evaluating frontier multimodal foundation models on world state verification, 3D spatial topology, and spatiotemporal physical causality." />
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- FOUC prevention & Theme synchronization -->
+    <script>
+      (function() {
+        try {
+          const stored = localStorage.getItem("openwsv_theme");
+          const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          const theme = stored ? stored : (prefersDark ? "dark" : "light");
+          if (theme === "dark") {
+            document.documentElement.classList.add("dark");
+            document.querySelector('meta[name="color-scheme"]').content = "dark";
+          } else {
+            document.documentElement.classList.remove("dark");
+            document.querySelector('meta[name="color-scheme"]').content = "light";
+          }
+        } catch (e) {
+          document.documentElement.classList.add("dark");
+        }
+      })();
+    </script>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none' stroke='%2338bdf8' stroke-width='2.2'><polygon points='16,2 30,10 30,22 16,30 2,22 2,10'/><line x1='16' y1='2' x2='16' y2='30'/><line x1='2' y1='10' x2='30' y2='22'/><line x1='30' y1='10' x2='2' y2='22'/></svg>" />
+  </head>
+  <body class="bg-background text-foreground antialiased selection:bg-foreground selection:text-background min-h-screen">
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

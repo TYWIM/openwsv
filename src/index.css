@@ -1,0 +1,114 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+}
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+
+    /* Light Theme (Clean academic white) */
+    --background: oklch(100% 0 0);
+    --foreground: oklch(14.5% 0 0);
+    --card: oklch(100% 0 0);
+    --card-foreground: oklch(14.5% 0 0);
+    --popover: oklch(100% 0 0);
+    --popover-foreground: oklch(14.5% 0 0);
+    --primary: oklch(14.5% 0 0);
+    --primary-foreground: oklch(98.5% 0 0);
+    --secondary: oklch(96.5% 0 0);
+    --secondary-foreground: oklch(20.5% 0 0);
+    --muted: oklch(96.5% 0 0);
+    --muted-foreground: oklch(48% 0 0);
+    --accent: oklch(95% 0 0);
+    --accent-foreground: oklch(14.5% 0 0);
+    --border: oklch(91.5% 0 0);
+    --ring: oklch(14.5% 0 0);
+
+    /* Model family colors */
+    --color-starlife: #0284c7;
+    --color-gemini: #1a73e8;
+    --color-openai: #10a37f;
+    --color-anthropic: #cc6543;
+    --color-qwen: #615ced;
+    --color-deepseek: #3366ff;
+    --color-meta: #0081fb;
+    --color-mistral: #f26522;
+  }
+
+  .dark {
+    color-scheme: dark;
+
+    /* Dark Theme (Deep high-tech graphite #141414) */
+    --background: #141414;
+    --foreground: oklch(98.5% 0 0);
+    --card: #1b1b1b;
+    --card-foreground: oklch(98.5% 0 0);
+    --popover: #1c1c1c;
+    --popover-foreground: oklch(98.5% 0 0);
+    --primary: oklch(98.5% 0 0);
+    --primary-foreground: #141414;
+    --secondary: #222222;
+    --secondary-foreground: oklch(98.5% 0 0);
+    --muted: #202020;
+    --muted-foreground: oklch(72% 0 0);
+    --accent: #252525;
+    --accent-foreground: oklch(98.5% 0 0);
+    --border: #282828;
+    --ring: oklch(98.5% 0 0);
+
+    --color-starlife: #38bdf8;
+    --color-gemini: #4285f4;
+    --color-openai: #10a37f;
+    --color-anthropic: #f08264;
+    --color-qwen: #7f7af9;
+    --color-deepseek: #5c85ff;
+    --color-meta: #3b9cff;
+    --color-mistral: #ff7830;
+  }
+
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}

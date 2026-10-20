@@ -1,0 +1,62 @@
+<script setup lang="ts">
+</script>
+
+<template>
+  <footer class="mt-24 border-t border-border bg-card/40">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 py-10">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
+        <!-- Brand & Developer Info -->
+        <div class="space-y-1.5">
+          <div class="flex items-center gap-2.5">
+            <!-- 3D Polyhedron Logo -->
+            <svg
+              class="h-5 w-auto text-foreground shrink-0"
+              viewBox="0 0 32 32"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <polygon points="16,2 30,10 30,22 16,30 2,22 2,10" />
+              <line x1="16" y1="2" x2="16" y2="30" />
+              <line x1="2" y1="10" x2="30" y2="22" />
+              <line x1="30" y1="10" x2="2" y2="22" />
+            </svg>
+            <span class="text-base font-semibold tracking-tight text-foreground">
+              OpenWSV - BenchMark
+            </span>
+          </div>
+          <p class="text-xs text-muted-foreground font-mono">
+            Developer: <span class="text-foreground font-medium">StarLife AI</span> · Multimodal World State Verification
+          </p>
+        </div>
+
+        <!-- Navigation Links & Copyright -->
+        <div class="flex flex-col sm:items-end gap-2 text-xs font-mono text-muted-foreground">
+          <div class="flex items-center gap-4">
+            <a href="#leaderboard" class="hover:text-foreground transition-colors">
+              Leaderboard
+            </a>
+            <span>·</span>
+            <a href="#tasks" class="hover:text-foreground transition-colors">
+              Tasks
+            </a>
+            <span>·</span>
+            <a href="#methodology" class="hover:text-foreground transition-colors">
+              Methodology
+            </a>
+            <span>·</span>
+            <a href="#whitepaper" class="hover:text-foreground transition-colors">
+              Whitepaper
+            </a>
+          </div>
+          <div class="text-[11px] text-muted-foreground/80">
+            © 2026 StarLife AI. All rights reserved.
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+</template>
