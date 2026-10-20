@@ -38,7 +38,9 @@ python -m starlife_eval leaderboard --run runs/v2g_real \
   家族色、整体 70% 透明度（同家族两根柱子同色）；不按指标切换颜色，hover 行升至不透明
   并加浅底、不弹 tooltip。深色背景下对比度不足的家族色会
   `color-mix(in oklab, <色> 75%, white)` 提亮。图下有 9 项非交互家族图例（圆点与柱体同色，
-  同家族标 `×N`）。底部 0/25/50/75/100 浅灰网格，无上/右边框。
+  同家族标 `×N`）。柱末端另有 95% bootstrap 浮动区间（深色点估计竖线 + 细灰线/两端竖帽，
+  数据来自 `src/data/confidence_intervals.json` 的 pair-level bootstrap），数值标签后附区间小字，
+  图下有固定口径说明；区间重叠不代表名次确定。底部 0/25/50/75/100 浅灰网格，无上/右边框。
   数据全部来自 `src/data/leaderboard.generated.json` 的 `compositeScore` 与 `composite.dims[]`。
   后端另有 `reports/v1.4/difficulty_curve.json` 诊断数据（按 GT 难度分档的趋势），**当前 UI 不展示**。
 - 数值口径见 `starlife_eval/ARCHITECTURE.md` §5.6：`score = 100 × event.macro_f1_common`、

@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import type { CompositeDimKey, ModelResult } from '../data/benchmarkData';
+import {
+  CONFIDENCE_NOTE,
+  confidenceFor,
+  type ConfidenceInterval,
+} from '../data/confidenceData';
 
 type MetricKey = 'composite' | CompositeDimKey;
 
@@ -120,12 +125,17 @@ const readableFill = (model: ModelResult): string => {
 interface BarRow {
   model: ModelResult;
   value: number | null;
+  ci: ConfidenceInterval | null;
 }
 
 /** 按当前指标从高到低重排；N/A 行排最后（不当作 0 分）。 */
 const rows = computed<BarRow[]>(() =>
   props.models
-    .map((model) => ({ model, value: metricValue(model, activeMetric.value) }))
+    .map((model) => ({
+      model,
+      value: metricValue(model, activeMetric.value),
+      ci: confidenceFor(model.id, activeMetric.value),
+    }))
     .sort((a, b) => {
       if (a.value == null && b.value == null) return 0;
       if (a.value == null) return 1;
@@ -163,6 +173,20 @@ const legendFamilies = computed(() => {
 const activeKey = computed(() => activeMetric.value);
 
 const activeNote = computed(() => METRIC_NOTES[activeMetric.value]);
+
+const fmt1 = (value: number): string => value.toFixed(1);
+
+const ciTitle = (interval: ConfidenceInterval | null): string =>
+  interval ? `95% CI ${fmt1(interval.lo)}–${fmt1(interval.hi)}` : '95% CI —';
+
+/** 数值标签后的区间：宽屏 [lo–hi]，窄屏 ±half。 */
+const ciFull = (interval: ConfidenceInterval): string =>
+  `[${fmt1(interval.lo)}–${fmt1(interval.hi)}]`;
+
+const ciHalf = (interval: ConfidenceInterval): string => {
+  const round1 = (value: number) => Number(value.toFixed(1));
+  return `±${((round1(interval.hi) - round1(interval.lo)) / 2).toFixed(1)}`;
+};
 
 const legendLabel = (entry: { name: string; count: number }): string =>
   entry.count > 1 ? `${entry.name}(×${entry.count})` : entry.name;
@@ -211,6 +235,7 @@ const legendLabel = (entry: { name: string; count: number }): string =>
             data-bar-row
             :data-model-id="row.model.id"
             :data-value="row.value == null ? 'N/A' : row.value.toFixed(1)"
+            :title="ciTitle(row.value == null ? null : row.ci)"
             class="bar-row group rounded-[3px] px-0.5 transition-colors hover:bg-accent/40 focus-visible:bg-accent/40"
           >
             <span
@@ -235,13 +260,56 @@ const legendLabel = (entry: { name: string; count: number }): string =>
                   '--bar-opacity': baseBarOpacity(row).toFixed(2),
                 }"
               />
+              <!-- 浮动区间画在柱子上层：细灰线 + 两端竖帽 + 柱末端深色点估计竖线 -->
+              <div
+                v-if="row.value != null && row.ci"
+                data-ci-whisker
+                :data-ci-value="row.ci.value.toFixed(2)"
+                :data-ci-lo="row.ci.lo.toFixed(2)"
+                :data-ci-hi="row.ci.hi.toFixed(2)"
+                class="ci-layer pointer-events-none absolute inset-0"
+                aria-hidden="true"
+              >
+                <template v-if="row.ci.hi > row.ci.lo">
+                  <span
+                    data-ci-range
+                    class="ci-range absolute top-1/2 h-[1.5px] -translate-y-1/2"
+                    :style="{
+                      left: `${row.ci.lo.toFixed(2)}%`,
+                      width: `${(row.ci.hi - row.ci.lo).toFixed(2)}%`,
+                    }"
+                  />
+                  <span
+                    data-ci-cap
+                    class="ci-cap absolute top-1/2 h-[6px] w-[1.5px] -translate-y-1/2"
+                    :style="{ left: `${row.ci.lo.toFixed(2)}%` }"
+                  />
+                  <span
+                    data-ci-cap
+                    class="ci-cap absolute top-1/2 h-[6px] w-[1.5px] -translate-y-1/2"
+                    :style="{ left: `${row.ci.hi.toFixed(2)}%` }"
+                  />
+                </template>
+                <span
+                  data-ci-point
+                  class="ci-point absolute top-1/2 h-[10px] w-[1.5px] -translate-y-1/2"
+                  :style="{ left: `${row.ci.value.toFixed(2)}%` }"
+                />
+              </div>
             </div>
-            <span
-              data-bar-value
-              class="value-cell font-mono text-foreground"
-              :class="isLocal(row.model) ? 'font-semibold' : ''"
-            >
-              {{ valueLabel(row) }}
+            <span class="value-cell font-mono text-foreground">
+              <span
+                data-bar-value
+                :class="isLocal(row.model) ? 'font-semibold' : ''"
+              >{{ valueLabel(row) }}</span>
+              <span
+                v-if="row.value != null && row.ci"
+                data-ci-label
+                class="ci-label text-muted-foreground"
+              >
+                <span data-ci-label-full class="ci-label-full">{{ ciFull(row.ci) }}</span>
+                <span data-ci-label-short class="ci-label-short">{{ ciHalf(row.ci) }}</span>
+              </span>
             </span>
           </div>
         </div>
@@ -282,13 +350,17 @@ const legendLabel = (entry: { name: string; count: number }): string =>
     >
       {{ activeNote }}
     </p>
+
+    <p data-ci-note class="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+      {{ CONFIDENCE_NOTE }}
+    </p>
   </section>
 </template>
 
 <style scoped>
 .bars {
   --bar-label-w: 104px;
-  --bar-value-w: 40px;
+  --bar-value-w: 86px;
   --bar-gap: 8px;
 }
 
@@ -311,9 +383,43 @@ const legendLabel = (entry: { name: string; count: number }): string =>
 }
 
 .value-cell {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 3px;
   font-size: 10px;
-  text-align: right;
   white-space: nowrap;
+}
+
+.ci-label {
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.ci-label-short {
+  display: none;
+}
+
+.ci-layer {
+  opacity: 0.65;
+  transition: opacity 150ms ease-out;
+}
+
+/* hover 行时 whisker 提升到不透明；默认 65% 让位给柱子。 */
+.group:hover .ci-layer {
+  opacity: 1;
+}
+
+.ci-point {
+  background-color: var(--foreground);
+  opacity: 0.9;
+}
+
+.ci-range,
+.ci-cap {
+  background-color: var(--foreground);
+  opacity: 0.4;
 }
 
 .bar-fill {
@@ -364,7 +470,17 @@ const legendLabel = (entry: { name: string; count: number }): string =>
 @media (min-width: 640px) {
   .bars {
     --bar-label-w: 136px;
-    --bar-value-w: 44px;
+    --bar-value-w: 118px;
+  }
+}
+
+@media (max-width: 639px) {
+  .ci-label-full {
+    display: none;
+  }
+
+  .ci-label-short {
+    display: inline;
   }
 }
 </style>
