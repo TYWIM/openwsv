@@ -52,6 +52,11 @@ export type ModelFamily =
   | 'DeepSeek'
   | 'Mistral'
   | 'Meta'
+  | 'Xiaomi'
+  | 'MiniMax'
+  | 'Zhipu'
+  | 'ByteDance'
+  | 'Tencent'
   | 'Community';
 
 export type MetricSectionValue = number | string | null | Array<number | string>;
@@ -213,6 +218,11 @@ const FAMILY_COLORS: Record<string, string> = {
   DeepSeek: 'var(--color-deepseek)',
   Mistral: 'var(--color-mistral)',
   Meta: 'var(--color-meta)',
+  Xiaomi: 'var(--color-xiaomi)',
+  MiniMax: 'var(--color-minimax)',
+  Zhipu: 'var(--color-zhipu)',
+  ByteDance: 'var(--color-bytedance)',
+  Tencent: 'var(--color-tencent)',
 };
 
 const KNOWN_FAMILIES: ModelFamily[] = [
@@ -224,6 +234,11 @@ const KNOWN_FAMILIES: ModelFamily[] = [
   'DeepSeek',
   'Mistral',
   'Meta',
+  'Xiaomi',
+  'MiniMax',
+  'Zhipu',
+  'ByteDance',
+  'Tencent',
   'Community',
 ];
 

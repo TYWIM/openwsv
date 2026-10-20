@@ -31,11 +31,14 @@ python -m starlife_eval leaderboard --run runs/v2g_real \
   `score`（可比事件分）等旧字段**保留**为展开明细，没有删除。
   综合分口径来自 `meta.composite`（等权、缺项自动从分母剔除），见下节契约。
 - 页面展示综合分、7 维分解与每个事件的端到端延迟（含特征抽取 / API 往返；云端受网络与输出长度影响）。
+- 榜单上方是 **7 维能力折线图（parallel coordinates）**：每个模型一条折线，X 轴为 7 个维度、
+  Y 轴 0–100；支持家族筛选、只看 Top 6 / 全部、图例点击显隐、右侧综合分排名与 hover/focus tooltip
+  （模型、维度、数值、该维度排名）。延迟只保留在表格列里，不进入该图。
 - 数值口径见 `starlife_eval/ARCHITECTURE.md` §5.6：`score = 100 × event.macro_f1_common`、
   `topologyF1 = 100 × relation_type_acc`、`affordanceAcc = 100 × attrs_acc`、
   `stateTransitionAcc = 100 × change_top1`。
 - **null 语义**：任何数值字段为 `null` 表示"该维度没有真实测量值"，前端渲染为 `N/A`，
-  散点图跳过该点，绝不显示 0 或占位值。
+  能力折线图断开该点，绝不显示 0 或占位值。
 - `leaderboard.generated.json` 缺失或 `models: []` 时，页面显示"尚无评测结果"空态，不白屏。
 
 > `src/data/leaderboard.generated.json` 里若出现 `_note: "SAMPLE for dev only…"`，
@@ -142,15 +145,15 @@ python -m starlife_eval leaderboard --run runs/v2g_real \
 - **参赛方式**：`mode` 为 `LOCAL-HEADS` 的行在前端显示为 `local-heads`（有监督专用头），
   `ZERO-SHOT` 显示为 `zero-shot`（零样本通用模型）。页面明确提示**两类不可直接等量齐观**
   （专用头见过训练集、零样本没有），详见 reliability 报告。
-- **综合分依赖权重（已知性质）**：换一组权重，云端 4 个模型的名次会互换，但本地两行始终第一；
-  详见 reliability 报告。前两名（v2 / v2g）综合分差 0.1 分，约等于打平（差值由前端按数据实时计算，
+- **综合分依赖权重（已知性质）**：换一组权重，云端模型的名次会互换，但本地行始终第一；
+  详见 reliability 报告。前两名综合分差 0.1 分时约等于打平（差值由前端按数据实时计算，
   不手抄）；行内只有 `isBest` 徽标。
 - 7 维中的两个口径提醒放在展开区 tooltip：`rel_pos` 只统计**关系判定正确后**的方位；
   `state_consistency` **不含实体类别维度**。
 - `score`/`topologyF1`/`affordanceAcc`/`stateTransitionAcc` 是 **0–100 的百分数**（§5.6 映射），
   现在作为**明细**保留；`metrics.*` 是 0–1 比例，UI 展开明细时显示为百分比。
   UI 的旧字段/明细数值全部直接读该 JSON，不手抄。
-- 数值字段允许 `null`；`null` 在 UI 渲染为 `N/A`，散点图跳过该点。
+- 数值字段允许 `null`；`null` 在 UI 渲染为 `N/A`，能力折线图断开该点。
 - `metrics` 可选，表格行可展开查看明细；缺失（或某分组为 `null`）时对应分组不显示。
   注意 `metrics.state` 是**数字**（state_acc），`head`/`pair`/`event` 是对象。
 - `version`/`isBest` 用于筛选与强调；`confidence` 目前恒为 `null`（未做 95% bootstrap），UI 隐藏。

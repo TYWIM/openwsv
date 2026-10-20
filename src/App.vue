@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed } from 'vue';
 import Header from './components/Header.vue';
 import Hero from './components/Hero.vue';
 import WorldModelStages from './components/WorldModelStages.vue';
-import ScatterPlot from './components/ScatterPlot.vue';
+import AbilityChart from './components/AbilityChart.vue';
 import LeaderboardTable from './components/LeaderboardTable.vue';
 import TaskExamplesGrid from './components/TaskExamplesGrid.vue';
 import MethodologySection from './components/MethodologySection.vue';
@@ -14,9 +14,6 @@ import {
   DATA_VERSIONS,
   HAS_RESULTS,
   LEADERBOARD_META,
-  firstAvailableMetric,
-  hasMetricData,
-  type MetricKey,
 } from './data/benchmarkData';
 
 const activeVersion = ref<string>(DATA_VERSIONS[0] ?? 'v1.1');
@@ -24,14 +21,6 @@ const activeVersion = ref<string>(DATA_VERSIONS[0] ?? 'v1.1');
 const versionModels = computed(() =>
   BENCHMARK_MODELS.filter((model) => model.version === activeVersion.value),
 );
-
-const activeMetric = ref<MetricKey | null>(firstAvailableMetric(versionModels.value));
-
-/** 切换版本后，若当前 X 维度在新版本里没有实测值，自动回退。 */
-watch(versionModels, (models) => {
-  if (activeMetric.value && hasMetricData(models, activeMetric.value)) return;
-  activeMetric.value = firstAvailableMetric(models);
-});
 
 const scrollToSection = (sectionId: string) => {
   const el = document.getElementById(sectionId);
@@ -63,20 +52,11 @@ const scrollToSection = (sectionId: string) => {
           </div>
           <p class="mb-5 text-[12px] leading-relaxed text-muted-foreground">
             任何视觉语言模型都可提交（零样本或专用头均可）；本地专用头与云端零样本模型不可直接等量齐观。
-            排序按 7 维等权综合分，前二差 0.1 分约等于打平，详见榜单脚注与 reliability 报告。
+            排序按 7 维等权综合分，前两名分差与打平提示均由数据实时计算，详见榜单脚注与 reliability 报告。
           </p>
 
           <template v-if="HAS_RESULTS">
-            <ScatterPlot
-              :models="versionModels"
-              :all-models-count="versionModels.length"
-              :active-metric="activeMetric"
-              :active-version="activeVersion"
-              :versions="DATA_VERSIONS"
-              :meta="LEADERBOARD_META"
-              @update:active-metric="activeMetric = $event"
-              @update:active-version="activeVersion = $event"
-            />
+            <AbilityChart :models="versionModels" :meta="LEADERBOARD_META" />
 
             <LeaderboardTable
               :all-models="BENCHMARK_MODELS"

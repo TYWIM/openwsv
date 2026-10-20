@@ -329,7 +329,7 @@ const metricGroups = (model: ModelResult): MetricGroup[] => {
       <span class="font-mono text-foreground">local-heads</span>（有监督专用头）与
       <span class="font-mono text-foreground">zero-shot</span>（零样本通用模型）。
       两类不可直接等量齐观（专用头见过训练集、零样本没有）；综合分只做同口径汇总，
-      换一组权重云端名次会互换，本地两行始终第一，详见 reliability 报告。
+      换一组权重云端名次会互换，本地行始终第一，详见 reliability 报告。
     </p>
 
     <!-- 表格 -->
@@ -481,7 +481,7 @@ const metricGroups = (model: ModelResult): MetricGroup[] => {
                       <span class="font-mono text-foreground">权重：</span>{{ weightsLabel(m) }}
                     </p>
                     <p v-if="m.composite" class="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                      综合分依赖权重：换一组权重，云端 4 个模型的名次会互换，但本地两行始终第一；详见
+                      综合分依赖权重：换一组权重，云端模型的名次会互换，但本地行始终第一；详见
                       reliability 报告。
                     </p>
                     <p v-if="meta.composite?.note" class="mt-1 text-[11px] leading-relaxed text-muted-foreground/80">
@@ -616,8 +616,8 @@ const metricGroups = (model: ModelResult): MetricGroup[] => {
     <p v-if="topTwo" class="text-[12px] leading-relaxed text-muted-foreground">
       前两名 {{ topTwo.first.name }} / {{ topTwo.second.name }} 的综合分为
       {{ fmtPct(primaryScore(topTwo.first)) }} : {{ fmtPct(primaryScore(topTwo.second)) }}，
-      差 {{ topTwo.gap.toFixed(1) }} 分，约等于打平。综合分依赖权重——换一组权重，云端 4 个模型的名次会
-      互换，但本地两行始终第一；详见 reliability 报告。
+      差 {{ topTwo.gap.toFixed(1) }} 分，约等于打平。综合分依赖权重——换一组权重，云端模型的名次会
+      互换，但本地行始终第一；详见 reliability 报告。
     </p>
   </div>
 </template>

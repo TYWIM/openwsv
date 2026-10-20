@@ -53,6 +53,11 @@
     --color-deepseek: #3366ff;
     --color-meta: #0081fb;
     --color-mistral: #f26522;
+    --color-xiaomi: #f97316;
+    --color-minimax: #e11d48;
+    --color-zhipu: #0d9488;
+    --color-bytedance: #a855f7;
+    --color-tencent: #0891b2;
   }
 
   .dark {
@@ -84,6 +89,11 @@
     --color-deepseek: #5c85ff;
     --color-meta: #3b9cff;
     --color-mistral: #ff7830;
+    --color-xiaomi: #fb923c;
+    --color-minimax: #fb7185;
+    --color-zhipu: #2dd4bf;
+    --color-bytedance: #c084fc;
+    --color-tencent: #22d3ee;
   }
 
   * {
