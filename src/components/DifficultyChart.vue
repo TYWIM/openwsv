@@ -40,9 +40,17 @@ const VB_H = 420;
 const PAD = { top: 18, right: 24, bottom: 46, left: 46 };
 const PLOT_W = VB_W - PAD.left - PAD.right;
 const PLOT_H = VB_H - PAD.top - PAD.bottom;
-const xFor = (index: number) => PAD.left + (PLOT_W * index) / (DIFFICULTY_BUCKETS.length - 1);
-const pointY = (value: number) => PAD.top + (1 - value / 100) * PLOT_H;
-const GRID_LINES = [0, 20, 40, 60, 80, 100];
+/** Y 轴只画 60–100；<60 的点钳制在 60 底线上并用 ▼ 标记（tooltip 仍显示真实值）。 */
+const Y_MIN = 60;
+const Y_MAX = 100;
+/** X 轴真实档位反序：左 = 档 4（最难），右 = 档 1（最易）。 */
+const DISPLAY_BUCKETS = [...DIFFICULTY_BUCKETS].reverse();
+const xFor = (index: number) => PAD.left + (PLOT_W * index) / (DISPLAY_BUCKETS.length - 1);
+const pointY = (value: number) => {
+  const clamped = Math.min(Y_MAX, Math.max(Y_MIN, value));
+  return PAD.top + (1 - (clamped - Y_MIN) / (Y_MAX - Y_MIN)) * PLOT_H;
+};
+const GRID_LINES = [60, 70, 80, 90, 100];
 
 // ------------------------------------------------------------------ 交互状态
 
@@ -166,6 +174,7 @@ interface CurvePoint {
   x: number;
   y: number;
   bucketIndex: number;
+  clamped: boolean;
   point: DifficultyPoint;
 }
 
@@ -180,17 +189,24 @@ const curvePoints = (model: ModelResult): CurvePoint[] => {
   const curve = difficultyFor(model.id);
   if (!curve) return [];
   const byBucket = new Map(curve.points.map((point) => [point.bucket, point]));
-  return DIFFICULTY_BUCKETS.map((bucket, index) => {
+  return DISPLAY_BUCKETS.map((bucket, index) => {
     const point = byBucket.get(bucket.key);
     if (!point || point.composite == null) return null;
     return {
       x: xFor(index),
       y: pointY(point.composite),
       bucketIndex: index,
+      clamped: point.composite < Y_MIN,
       point,
     };
   }).filter((point): point is CurvePoint => point !== null);
 };
+
+/** 低于 Y 下界的点画 ▼：底边在钳制线上方 7px，尖端指向下界。 */
+const trianglePath = (point: CurvePoint) =>
+  `M ${(point.x - 3.8).toFixed(2)} ${(point.y - 7).toFixed(2)} ` +
+  `L ${(point.x + 3.8).toFixed(2)} ${(point.y - 7).toFixed(2)} ` +
+  `L ${point.x.toFixed(2)} ${(point.y + 1.5).toFixed(2)} Z`;
 
 const lines = computed<ChartLine[]>(() =>
   drawOrder.value.map((model) => {
@@ -221,13 +237,16 @@ const activePoint = computed(() => {
   const model = activeModel.value;
   const index = hoverBucket.value;
   if (!model || index == null) return null;
-  const bucket = DIFFICULTY_BUCKETS[index];
+  const bucket = DISPLAY_BUCKETS[index];
+  if (!bucket) return null;
   const point = difficultyFor(model.id)?.points.find((item) => item.bucket === bucket.key);
-  if (!bucket || !point || point.composite == null) return null;
+  if (!point || point.composite == null) return null;
   return {
     model,
     bucket,
     point,
+    displayIndex: index,
+    clamped: point.composite < Y_MIN,
     x: xFor(index),
     y: pointY(point.composite),
   };
@@ -238,16 +257,23 @@ const tooltip = computed(() => {
   if (!active) return null;
   const label = active.bucket.label;
   const left = (active.x / VB_W) * 100;
-  const top = Math.min(78, Math.max(6, (active.y / VB_H) * 100));
-  const transform =
-    active.bucket.rank === 1
-      ? 'translate(-6%, 8px)'
-      : active.bucket.rank === DIFFICULTY_BUCKETS.length
-        ? 'translate(-94%, 8px)'
-        : 'translate(-50%, 8px)';
+  const top = Math.min(88, Math.max(4, (active.y / VB_H) * 100));
+  const horizontal =
+    active.displayIndex === 0
+      ? '-6%'
+      : active.displayIndex === DISPLAY_BUCKETS.length - 1
+        ? '-94%'
+        : '-50%';
+  // 点靠下（含 60 底线上的 ▼）时 tooltip 放到点上方，避免压住图下口径说明。
+  const vertical = active.y < VB_H * 0.48 ? '8px' : '-100%';
+  const transform = `translate(${horizontal}, ${vertical})`;
+  const scoreText = active.clamped
+    ? `${active.point.composite.toFixed(1)}（低于坐标下界）`
+    : fmtPct(active.point.composite);
   return {
     ...active,
     label,
+    scoreText,
     left: `${left}%`,
     top: `${top}%`,
     transform,
@@ -260,9 +286,9 @@ const handleChartMove = (event: MouseEvent) => {
   const rect = target.getBoundingClientRect();
   if (!rect.width) return;
   const x = ((event.clientX - rect.left) / rect.width) * VB_W;
-  const raw = ((x - PAD.left) / PLOT_W) * (DIFFICULTY_BUCKETS.length - 1);
+  const raw = ((x - PAD.left) / PLOT_W) * (DISPLAY_BUCKETS.length - 1);
   hoverBucket.value = Math.min(
-    DIFFICULTY_BUCKETS.length - 1,
+    DISPLAY_BUCKETS.length - 1,
     Math.max(0, Math.round(raw)),
   );
 };
@@ -375,6 +401,7 @@ const focusLine = (model: ModelResult) => {
                 :key="`tick-${tick}`"
                 :x="PAD.left - 8"
                 :y="pointY(tick) + 3"
+                data-y-tick
                 text-anchor="end"
                 class="fill-muted-foreground font-mono"
                 font-size="9"
@@ -396,7 +423,7 @@ const focusLine = (model: ModelResult) => {
             <!-- 难度档竖线 + X 轴档位标签 / 每档 n -->
             <g aria-hidden="true">
               <line
-                v-for="(bucket, index) in DIFFICULTY_BUCKETS"
+                v-for="(bucket, index) in DISPLAY_BUCKETS"
                 :key="`axis-${bucket.key}`"
                 :x1="xFor(index)"
                 :x2="xFor(index)"
@@ -406,7 +433,7 @@ const focusLine = (model: ModelResult) => {
                 stroke-width="1"
               />
               <text
-                v-for="(bucket, index) in DIFFICULTY_BUCKETS"
+                v-for="(bucket, index) in DISPLAY_BUCKETS"
                 :key="`bucket-label-${bucket.key}`"
                 data-bucket-label
                 :x="xFor(index)"
@@ -418,7 +445,7 @@ const focusLine = (model: ModelResult) => {
                 {{ bucket.label }}
               </text>
               <text
-                v-for="(bucket, index) in DIFFICULTY_BUCKETS"
+                v-for="(bucket, index) in DISPLAY_BUCKETS"
                 :key="`bucket-n-${bucket.key}`"
                 data-bucket-n
                 :x="xFor(index)"
@@ -468,22 +495,36 @@ const focusLine = (model: ModelResult) => {
                 stroke-linecap="round"
                 stroke-linejoin="round"
               />
-              <circle
-                v-for="point in line.points"
-                :key="`${line.model.id}-p-${point.bucketIndex}`"
-                data-chart-point
-                :cx="point.x"
-                :cy="point.y"
-                :r="isLocal(line.model) ? 3.2 : 2.4"
-                :fill="isLocal(line.model) ? line.color : 'var(--background)'"
-                :fill-opacity="isLocal(line.model) ? lineOpacity(line.model) : 1"
-                :stroke="line.color"
-                :stroke-opacity="lineOpacity(line.model)"
-                :stroke-width="isLocal(line.model) ? 1 : 1.4"
-              />
+              <template v-for="point in line.points" :key="`${line.model.id}-p-${point.bucketIndex}`">
+                <circle
+                  v-if="!point.clamped"
+                  data-chart-point
+                  :cx="point.x"
+                  :cy="point.y"
+                  :r="isLocal(line.model) ? 3.2 : 2.4"
+                  :fill="isLocal(line.model) ? line.color : 'var(--background)'"
+                  :fill-opacity="isLocal(line.model) ? lineOpacity(line.model) : 1"
+                  :stroke="line.color"
+                  :stroke-opacity="lineOpacity(line.model)"
+                  :stroke-width="isLocal(line.model) ? 1 : 1.4"
+                />
+                <path
+                  v-else
+                  data-chart-clamped
+                  :data-bucket="point.point.bucket"
+                  :d="trianglePath(point)"
+                  :fill="isLocal(line.model) ? line.color : 'var(--background)'"
+                  :fill-opacity="isLocal(line.model) ? lineOpacity(line.model) : 1"
+                  :stroke="line.color"
+                  :stroke-opacity="lineOpacity(line.model)"
+                  stroke-width="1.4"
+                  stroke-linejoin="round"
+                />
+              </template>
               <circle
                 v-for="point in line.points"
                 :key="`${line.model.id}-hit-${point.bucketIndex}`"
+                data-chart-hit
                 :cx="point.x"
                 :cy="point.y"
                 r="10"
@@ -532,7 +573,8 @@ const focusLine = (model: ModelResult) => {
             </div>
             <div class="mt-1 font-mono text-[12px] text-foreground">
               分档综合分
-              <span class="ml-1 text-sm">{{ fmtPct(tooltip.point.composite) }}</span>
+              <span class="ml-1 text-sm">{{ tooltip.scoreText }}</span>
+              <span v-if="tooltip.clamped" class="ml-1 text-[10px] text-muted-foreground">▼</span>
             </div>
             <div class="mt-1.5 space-y-0.5 border-t border-border pt-1.5">
               <div
