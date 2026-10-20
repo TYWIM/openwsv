@@ -194,8 +194,7 @@ const toggleTheme = () => {
           class="h-8 px-2.5 inline-flex items-center gap-1.5 border border-border bg-background text-foreground hover:bg-accent transition-colors whitespace-nowrap"
         >
           <Github class="size-3.5 shrink-0" />
-          <span class="hidden lg:inline text-[11px] font-mono">umr-xiaomai/openwsv</span>
-          <span class="hidden sm:inline lg:hidden text-xs font-medium">openwsv</span>
+          <span class="hidden sm:inline text-xs font-medium">openwsv</span>
         </a>
 
         <button
@@ -256,7 +255,7 @@ const toggleTheme = () => {
           @click="mobileOpen = false"
         >
           <Github class="size-4 shrink-0" />
-          <span class="truncate font-mono text-[11px]">umr-xiaomai/openwsv</span>
+          <span class="truncate text-xs font-medium">openwsv</span>
         </a>
       </nav>
     </div>
