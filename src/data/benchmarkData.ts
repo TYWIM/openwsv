@@ -272,14 +272,16 @@ const normalizeModel = (raw: RawModel): ModelResult => {
   const id = toStr(raw.id, toStr(raw.name, 'unknown-model'));
   const score = toNum(raw.score);
   const hasBestFlag = typeof raw.isBest === 'boolean';
+  // 颜色以 family 为准（family 是分类口径，颜色只是它的视觉映射）；后端若给了
+  // providerColor 只在 family 未识别（Community/自定义）时作为兜底。
+  const providerColor =
+    FAMILY_COLORS[family] ?? toStr(raw.providerColor, 'var(--color-muted, #8b93a7)');
   return {
     id,
     name: toStr(raw.name, id),
     family,
     provider: toStr(raw.provider, family),
-    providerColor:
-      toStr(raw.providerColor, FAMILY_COLORS[family] ?? 'var(--muted-foreground)') ||
-      'var(--muted-foreground)',
+    providerColor,
     mode: toStr(raw.mode, '—'),
     score,
     confidence: toNum(raw.confidence),
