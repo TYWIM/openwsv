@@ -3,7 +3,7 @@ import { ref, computed } from 'vue';
 import Header from './components/Header.vue';
 import Hero from './components/Hero.vue';
 import WorldModelStages from './components/WorldModelStages.vue';
-import AbilityChart from './components/AbilityChart.vue';
+import DifficultyChart from './components/DifficultyChart.vue';
 import LeaderboardTable from './components/LeaderboardTable.vue';
 import TaskExamplesGrid from './components/TaskExamplesGrid.vue';
 import MethodologySection from './components/MethodologySection.vue';
@@ -56,7 +56,7 @@ const scrollToSection = (sectionId: string) => {
           </p>
 
           <template v-if="HAS_RESULTS">
-            <AbilityChart :models="versionModels" :meta="LEADERBOARD_META" />
+            <DifficultyChart :models="versionModels" :meta="LEADERBOARD_META" />
 
             <LeaderboardTable
               :all-models="BENCHMARK_MODELS"

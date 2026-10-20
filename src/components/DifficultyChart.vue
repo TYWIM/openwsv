@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import type { CompositeDimKey, LeaderboardMeta, ModelResult } from '../data/benchmarkData';
+import type { LeaderboardMeta, ModelResult } from '../data/benchmarkData';
 import { fmtPct } from '../data/benchmarkData';
+import {
+  DIFFICULTY_BUCKETS,
+  DIFFICULTY_DIMS,
+  DIFFICULTY_NOTE,
+  difficultyFor,
+  type DifficultyPoint,
+} from '../data/difficultyData';
 
 const props = withDefaults(
   defineProps<{
@@ -9,8 +16,8 @@ const props = withDefaults(
     meta?: LeaderboardMeta | null;
     /** 仅测试用：预置选中的模型，便于 SSR 验证 tooltip 内容。 */
     initialActiveId?: string;
-    /** 仅测试用：预置悬停的维度下标（0–6）。 */
-    initialFocusDim?: number;
+    /** 仅测试用：预置悬停的档位下标（0–3）。 */
+    initialBucket?: number;
     /** 仅测试用：预置家族筛选。 */
     initialFamilies?: string[];
     /** 仅测试用：预置只看 Top 6。 */
@@ -21,31 +28,19 @@ const props = withDefaults(
   {
     meta: null,
     initialActiveId: undefined,
-    initialFocusDim: undefined,
+    initialBucket: undefined,
     initialFamilies: undefined,
     initialTopOnly: false,
     initialHiddenIds: () => [],
   },
 );
 
-// ------------------------------------------------------------- 维度与几何参数
-
-const DIMS: Array<{ key: CompositeDimKey; label: string; short: string }> = [
-  { key: 'change_top1', label: '变化识别', short: '变化' },
-  { key: 'change_balance', label: '变化平衡', short: '平衡' },
-  { key: 'relation_type', label: '关系类型', short: '关系' },
-  { key: 'rel_pos', label: '空间方位', short: '方位' },
-  { key: 'attrs', label: '接触支撑', short: '接触' },
-  { key: 'event_f1', label: '事件F1', short: '事件F1' },
-  { key: 'state_consistency', label: '状态一致性', short: '一致性' },
-];
-
 const VB_W = 800;
 const VB_H = 420;
-const PAD = { top: 14, right: 22, bottom: 16, left: 46 };
+const PAD = { top: 18, right: 24, bottom: 46, left: 46 };
 const PLOT_W = VB_W - PAD.left - PAD.right;
 const PLOT_H = VB_H - PAD.top - PAD.bottom;
-const dimX = (index: number) => PAD.left + (PLOT_W * index) / (DIMS.length - 1);
+const xFor = (index: number) => PAD.left + (PLOT_W * index) / (DIFFICULTY_BUCKETS.length - 1);
 const pointY = (value: number) => PAD.top + (1 - value / 100) * PLOT_H;
 const GRID_LINES = [0, 20, 40, 60, 80, 100];
 
@@ -59,7 +54,7 @@ const selectedFamilies = ref<string[]>(
 const topOnly = ref(props.initialTopOnly);
 const hiddenIds = ref<string[]>([...(props.initialHiddenIds ?? [])]);
 const activeId = ref<string | null>(props.initialActiveId ?? null);
-const hoverDim = ref<number | null>(props.initialFocusDim ?? null);
+const hoverBucket = ref<number | null>(props.initialBucket ?? null);
 
 const isLocal = (model: ModelResult) => /local/i.test(model.mode) || model.family === 'StarLife';
 const modeBadge = (model: ModelResult) => (isLocal(model) ? 'L' : 'Z');
@@ -69,12 +64,6 @@ const scoredModels = computed(() =>
 );
 
 const scoreOf = (model: ModelResult): number => model.compositeScore ?? 0;
-
-const dimValue = (model: ModelResult, key: CompositeDimKey): number | null => {
-  const dim = model.composite?.dims.find((item) => item.key === key);
-  if (!dim || !dim.available || !Number.isFinite(dim.value)) return null;
-  return dim.value;
-};
 
 /** 综合分排名（只统计有综合分的模型），下标从 1 开始。 */
 const rankMap = computed(() => {
@@ -171,44 +160,47 @@ const colorFor = (model: ModelResult): string => {
   return `color-mix(in srgb, ${base} ${percent}%, white)`;
 };
 
-// ------------------------------------------------------------------ 折线数据
+// ------------------------------------------------------------------ 曲线数据
 
-interface Segment {
-  path: string;
+interface CurvePoint {
+  x: number;
+  y: number;
+  bucketIndex: number;
+  point: DifficultyPoint;
 }
 
 interface ChartLine {
   model: ModelResult;
   color: string;
-  segments: Segment[];
-  points: Array<{ x: number; y: number; dim: number; value: number }>;
+  path: string | null;
+  points: CurvePoint[];
 }
+
+const curvePoints = (model: ModelResult): CurvePoint[] => {
+  const curve = difficultyFor(model.id);
+  if (!curve) return [];
+  const byBucket = new Map(curve.points.map((point) => [point.bucket, point]));
+  return DIFFICULTY_BUCKETS.map((bucket, index) => {
+    const point = byBucket.get(bucket.key);
+    if (!point || point.composite == null) return null;
+    return {
+      x: xFor(index),
+      y: pointY(point.composite),
+      bucketIndex: index,
+      point,
+    };
+  }).filter((point): point is CurvePoint => point !== null);
+};
 
 const lines = computed<ChartLine[]>(() =>
   drawOrder.value.map((model) => {
-    const points: ChartLine['points'] = [];
-    const segments: Segment[] = [];
-    let current: string[] = [];
-    const flush = () => {
-      if (current.length > 1) {
-        const [first, ...rest] = current;
-        segments.push({ path: [`M ${first}`, ...rest.map((point) => `L ${point}`)].join(' ') });
-      }
-      current = [];
-    };
-    DIMS.forEach((dim, index) => {
-      const value = dimValue(model, dim.key);
-      if (value == null) {
-        flush();
-        return;
-      }
-      const x = dimX(index);
-      const y = pointY(value);
-      points.push({ x, y, dim: index, value });
-      current.push(`${x.toFixed(2)} ${y.toFixed(2)}`);
-    });
-    flush();
-    return { model, color: colorFor(model), segments, points };
+    const points = curvePoints(model);
+    const path = points.length
+      ? points
+          .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
+          .join(' ')
+      : null;
+    return { model, color: colorFor(model), path, points };
   }),
 );
 
@@ -221,52 +213,45 @@ const lineWidth = (model: ModelResult): number => (isLocal(model) ? 3 : 1.5);
 
 // -------------------------------------------------------------------- tooltip
 
-const rankFor = (modelId: string, key: CompositeDimKey): { rank: number; total: number } | null => {
-  const values = scoredModels.value
-    .map((model) => ({ id: model.id, value: dimValue(model, key) }))
-    .filter((item): item is { id: string; value: number } => item.value != null)
-    .sort((a, b) => b.value - a.value);
-  const index = values.findIndex((item) => item.id === modelId);
-  if (index < 0) return null;
-  return { rank: index + 1, total: values.length };
-};
-
 const activeModel = computed(
   () => chartModels.value.find((model) => model.id === activeId.value) ?? null,
 );
 
-const tooltip = computed(() => {
+const activePoint = computed(() => {
   const model = activeModel.value;
-  if (!model || hoverDim.value == null) return null;
-  const dim = DIMS[hoverDim.value];
-  const value = dimValue(model, dim.key);
-  if (value == null) return null;
-  const rank = rankFor(model.id, dim.key);
-  const left = (dimX(hoverDim.value) / VB_W) * 100;
-  const top = Math.min(86, Math.max(12, (pointY(value) / VB_H) * 100));
-  const transform =
-    hoverDim.value === 0
-      ? 'translate(-8%, -118%)'
-      : hoverDim.value === DIMS.length - 1
-        ? 'translate(-92%, -118%)'
-        : 'translate(-50%, -118%)';
+  const index = hoverBucket.value;
+  if (!model || index == null) return null;
+  const bucket = DIFFICULTY_BUCKETS[index];
+  const point = difficultyFor(model.id)?.points.find((item) => item.bucket === bucket.key);
+  if (!bucket || !point || point.composite == null) return null;
   return {
     model,
-    dim,
-    value,
-    rank,
+    bucket,
+    point,
+    x: xFor(index),
+    y: pointY(point.composite),
+  };
+});
+
+const tooltip = computed(() => {
+  const active = activePoint.value;
+  if (!active) return null;
+  const label = active.bucket.label;
+  const left = (active.x / VB_W) * 100;
+  const top = Math.min(78, Math.max(6, (active.y / VB_H) * 100));
+  const transform =
+    active.bucket.rank === 1
+      ? 'translate(-6%, 8px)'
+      : active.bucket.rank === DIFFICULTY_BUCKETS.length
+        ? 'translate(-94%, 8px)'
+        : 'translate(-50%, 8px)';
+  return {
+    ...active,
+    label,
     left: `${left}%`,
     top: `${top}%`,
     transform,
   };
-});
-
-const activeNode = computed(() => {
-  const model = activeModel.value;
-  if (!model || hoverDim.value == null) return null;
-  const value = dimValue(model, DIMS[hoverDim.value].key);
-  if (value == null) return null;
-  return { x: dimX(hoverDim.value), y: pointY(value) };
 });
 
 const handleChartMove = (event: MouseEvent) => {
@@ -275,19 +260,32 @@ const handleChartMove = (event: MouseEvent) => {
   const rect = target.getBoundingClientRect();
   if (!rect.width) return;
   const x = ((event.clientX - rect.left) / rect.width) * VB_W;
-  const raw = ((x - PAD.left) / PLOT_W) * (DIMS.length - 1);
-  hoverDim.value = Math.min(DIMS.length - 1, Math.max(0, Math.round(raw)));
+  const raw = ((x - PAD.left) / PLOT_W) * (DIFFICULTY_BUCKETS.length - 1);
+  hoverBucket.value = Math.min(
+    DIFFICULTY_BUCKETS.length - 1,
+    Math.max(0, Math.round(raw)),
+  );
 };
 
-const setActive = (model: ModelResult, dim?: number) => {
+const setActive = (model: ModelResult, bucket?: number) => {
   activeId.value = model.id;
-  if (dim != null) hoverDim.value = dim;
+  if (bucket != null) hoverBucket.value = bucket;
+};
+
+const clearHover = () => {
+  activeId.value = null;
+  hoverBucket.value = null;
+};
+
+const focusLine = (model: ModelResult) => {
+  setActive(model);
+  if (hoverBucket.value == null) hoverBucket.value = 0;
 };
 </script>
 
 <template>
   <section class="mt-8 border border-border bg-card/40 p-4 sm:p-5">
-    <!-- 顶部工具条：家族筛选 + Top 6 / 全部 + N/A 说明 -->
+    <!-- 顶部工具条：家族筛选 + Top 6 / 全部 -->
     <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div class="min-w-0">
         <div class="flex flex-wrap items-center gap-1.5">
@@ -344,10 +342,10 @@ const setActive = (model: ModelResult, dim?: number) => {
       </div>
     </div>
     <p class="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-      7 维能力形状：每个模型一条折线，同一维度上越高越好。未给出综合分的模型不进图（表格中显示为 N/A）。
+      按场景复杂度看趋势：横轴从档 1 到档 4 逐档变难，同一档上越高越好。未给出综合分的模型不进图（表格中显示为 N/A）。
     </p>
 
-    <!-- 主体：折线图 + 右侧综合分排名 -->
+    <!-- 主体：趋势图 + 右侧综合分排名 -->
     <div class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_224px]">
       <div class="min-w-0">
         <div class="relative">
@@ -355,9 +353,9 @@ const setActive = (model: ModelResult, dim?: number) => {
             :viewBox="`0 0 ${VB_W} ${VB_H}`"
             class="block h-auto w-full select-none"
             role="img"
-            aria-label="7 维能力折线图"
+            aria-label="分档综合分趋势图"
             @mousemove="handleChartMove"
-            @mouseleave="hoverDim = null"
+            @mouseleave="clearHover"
           >
             <!-- 横向网格 + Y 轴刻度 -->
             <g aria-hidden="true">
@@ -383,29 +381,63 @@ const setActive = (model: ModelResult, dim?: number) => {
               >
                 {{ tick }}
               </text>
+              <text
+                :x="12"
+                :y="PAD.top + PLOT_H / 2"
+                :transform="`rotate(-90 12 ${PAD.top + PLOT_H / 2})`"
+                text-anchor="middle"
+                class="fill-muted-foreground"
+                font-size="9"
+              >
+                分档综合分
+              </text>
             </g>
 
-            <!-- 维度竖轴 -->
+            <!-- 难度档竖线 + X 轴档位标签 / 每档 n -->
             <g aria-hidden="true">
               <line
-                v-for="(dim, index) in DIMS"
-                :key="`axis-${dim.key}`"
-                :x1="dimX(index)"
-                :x2="dimX(index)"
+                v-for="(bucket, index) in DIFFICULTY_BUCKETS"
+                :key="`axis-${bucket.key}`"
+                :x1="xFor(index)"
+                :x2="xFor(index)"
                 :y1="PAD.top"
-                :y2="VB_H - PAD.bottom"
+                :y2="PAD.top + PLOT_H"
                 stroke="var(--border)"
                 stroke-width="1"
               />
+              <text
+                v-for="(bucket, index) in DIFFICULTY_BUCKETS"
+                :key="`bucket-label-${bucket.key}`"
+                data-bucket-label
+                :x="xFor(index)"
+                :y="VB_H - 24"
+                text-anchor="middle"
+                class="fill-muted-foreground font-mono"
+                font-size="10"
+              >
+                {{ bucket.label }}
+              </text>
+              <text
+                v-for="(bucket, index) in DIFFICULTY_BUCKETS"
+                :key="`bucket-n-${bucket.key}`"
+                data-bucket-n
+                :x="xFor(index)"
+                :y="VB_H - 8"
+                text-anchor="middle"
+                class="fill-muted-foreground"
+                font-size="9"
+              >
+                n={{ bucket.n }}
+              </text>
             </g>
 
-            <!-- 悬停竖线 -->
+            <!-- 悬停档位竖线 -->
             <line
-              v-if="hoverDim != null"
-              :x1="dimX(hoverDim)"
-              :x2="dimX(hoverDim)"
+              v-if="hoverBucket != null"
+              :x1="xFor(hoverBucket)"
+              :x2="xFor(hoverBucket)"
               :y1="PAD.top"
-              :y2="VB_H - PAD.bottom"
+              :y2="PAD.top + PLOT_H"
               stroke="var(--muted-foreground)"
               stroke-width="1"
               stroke-dasharray="3 3"
@@ -417,18 +449,18 @@ const setActive = (model: ModelResult, dim?: number) => {
               v-for="line in lines"
               :key="line.model.id"
               data-chart-line
+              :data-model-id="line.model.id"
               class="outline-none"
               tabindex="0"
               role="img"
-              :aria-label="`${line.model.name}，综合分 ${fmtPct(line.model.compositeScore)}`"
+              :aria-label="`${line.model.name}，分档综合分趋势`"
               @mouseenter="setActive(line.model)"
-              @focus="setActive(line.model)"
+              @focus="focusLine(line.model)"
               @blur="activeId = null"
             >
               <path
-                v-for="(segment, index) in line.segments"
-                :key="`${line.model.id}-seg-${index}`"
-                :d="segment.path"
+                v-if="line.path"
+                :d="line.path"
                 fill="none"
                 :stroke="line.color"
                 :stroke-width="lineWidth(line.model)"
@@ -438,33 +470,35 @@ const setActive = (model: ModelResult, dim?: number) => {
               />
               <circle
                 v-for="point in line.points"
-                :key="`${line.model.id}-p-${point.dim}`"
+                :key="`${line.model.id}-p-${point.bucketIndex}`"
+                data-chart-point
                 :cx="point.x"
                 :cy="point.y"
-                :r="isLocal(line.model) ? 3 : 2.2"
-                :fill="line.color"
-                :fill-opacity="lineOpacity(line.model)"
-                :stroke="'var(--background)'"
-                stroke-width="0.75"
+                :r="isLocal(line.model) ? 3.2 : 2.4"
+                :fill="isLocal(line.model) ? line.color : 'var(--background)'"
+                :fill-opacity="isLocal(line.model) ? lineOpacity(line.model) : 1"
+                :stroke="line.color"
+                :stroke-opacity="lineOpacity(line.model)"
+                :stroke-width="isLocal(line.model) ? 1 : 1.4"
               />
               <circle
                 v-for="point in line.points"
-                :key="`${line.model.id}-hit-${point.dim}`"
+                :key="`${line.model.id}-hit-${point.bucketIndex}`"
                 :cx="point.x"
                 :cy="point.y"
-                r="9"
+                r="10"
                 fill="transparent"
                 class="cursor-crosshair"
-                @mouseenter="setActive(line.model, point.dim)"
+                @mouseenter="setActive(line.model, point.bucketIndex)"
               />
             </g>
 
-            <!-- 当前悬停维度的强调点 -->
+            <!-- 当前悬停节点的强调环 -->
             <circle
-              v-if="activeNode"
-              :cx="activeNode.x"
-              :cy="activeNode.y"
-              r="5"
+              v-if="activePoint"
+              :cx="activePoint.x"
+              :cy="activePoint.y"
+              r="5.5"
               fill="none"
               stroke="var(--foreground)"
               stroke-width="1.5"
@@ -472,17 +506,17 @@ const setActive = (model: ModelResult, dim?: number) => {
             />
           </svg>
 
-          <!-- tooltip（hover / focus 时显示该模型在该维度的数值与排名） -->
+          <!-- tooltip（模型 / 档位 + n / 分档综合分 / 7 维明细） -->
           <div
             v-if="tooltip"
             data-chart-tooltip
-            class="pointer-events-none absolute z-20 min-w-[160px] border border-border bg-popover px-2.5 py-2 shadow-sm"
+            class="pointer-events-none absolute z-20 w-[210px] border border-border bg-popover px-2.5 py-2 shadow-sm"
             :style="{ left: tooltip.left, top: tooltip.top, transform: tooltip.transform }"
           >
             <div class="flex items-center gap-1.5 text-[11px] font-medium text-foreground">
               <span
                 class="inline-block size-2 shrink-0"
-                :style="{ backgroundColor: tooltip.model.providerColor }"
+                :style="{ backgroundColor: colorFor(tooltip.model) }"
                 aria-hidden="true"
               />
               <span class="truncate">{{ tooltip.model.name }}</span>
@@ -490,10 +524,27 @@ const setActive = (model: ModelResult, dim?: number) => {
                 {{ modeBadge(tooltip.model) }}
               </span>
             </div>
-            <div class="mt-1 text-[10px] text-muted-foreground">{{ tooltip.dim.label }}</div>
-            <div class="mt-0.5 font-mono text-sm text-foreground">{{ fmtPct(tooltip.value) }}</div>
-            <div v-if="tooltip.rank" class="mt-0.5 text-[10px] text-muted-foreground">
-              该维度第 {{ tooltip.rank.rank }} / {{ tooltip.rank.total }}
+            <div class="mt-1 flex items-baseline justify-between gap-2 text-[10px] text-muted-foreground">
+              <span>{{ tooltip.bucket.label }} · n={{ tooltip.bucket.n }}</span>
+              <span class="font-mono">
+                难度 {{ tooltip.bucket.difficulty[0] }}–{{ tooltip.bucket.difficulty[1] }}
+              </span>
+            </div>
+            <div class="mt-1 font-mono text-[12px] text-foreground">
+              分档综合分
+              <span class="ml-1 text-sm">{{ fmtPct(tooltip.point.composite) }}</span>
+            </div>
+            <div class="mt-1.5 space-y-0.5 border-t border-border pt-1.5">
+              <div
+                v-for="dim in DIFFICULTY_DIMS"
+                :key="`tt-${dim.key}`"
+                class="flex items-baseline justify-between gap-2 text-[10px]"
+              >
+                <span class="text-muted-foreground">{{ dim.label }}</span>
+                <span class="font-mono text-foreground">
+                  {{ fmtPct(tooltip.point.dims[dim.key]) }}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -505,29 +556,10 @@ const setActive = (model: ModelResult, dim?: number) => {
           </div>
         </div>
 
-        <!-- X 轴标签：桌面完整、窄屏 4 字内并旋转 -30°；hover / focus 联动竖线 -->
-        <div class="axis-labels" aria-label="维度">
-          <div
-            v-for="(dim, index) in DIMS"
-            :key="`label-${dim.key}`"
-            class="axis-label-slot"
-            :style="{ left: `${(dimX(index) / VB_W) * 100}%` }"
-          >
-            <button
-              type="button"
-              data-axis-label
-              class="axis-label-btn"
-              :class="hoverDim === index ? 'text-foreground' : 'text-muted-foreground'"
-              @mouseenter="hoverDim = index"
-              @mouseleave="hoverDim = null"
-              @focus="hoverDim = index"
-              @blur="hoverDim = null"
-            >
-              <span class="axis-label-full">{{ dim.label }}</span>
-              <span class="axis-label-short">{{ dim.short }}</span>
-            </button>
-          </div>
-        </div>
+        <!-- 图下说明：数据口径与“别过度解读” -->
+        <p data-chart-note class="mt-3 text-[11px] leading-relaxed text-muted-foreground">
+          {{ DIFFICULTY_NOTE }} 分档诊断为辅助视图，榜单主分见表格。
+        </p>
       </div>
 
       <!-- 侧部：综合分排名（窄屏下沉到图下方） -->
@@ -579,13 +611,10 @@ const setActive = (model: ModelResult, dim?: number) => {
       </aside>
     </div>
 
-    <!-- 底部：怎么读 + 图例（按综合分排序，点击显示/隐藏） -->
-    <div class="mt-4 border-t border-border pt-3">
-      <p class="text-[11px] text-muted-foreground">
-        怎么读：同一维度上越高越好；线的交叉说明能力侧重不同。
-      </p>
+    <!-- 底部：图例（按综合分排序，点击显示/隐藏） -->
+    <div class="mt-3 border-t border-border pt-3">
       <div
-        class="mt-2 grid grid-flow-col grid-rows-2 gap-x-3 gap-y-1 overflow-x-auto pb-1 sm:flex sm:flex-wrap sm:overflow-visible sm:pb-0"
+        class="grid grid-flow-col grid-rows-2 gap-x-3 gap-y-1 overflow-x-auto pb-1 sm:flex sm:flex-wrap sm:overflow-visible sm:pb-0"
         role="group"
         aria-label="模型图例"
       >
@@ -625,61 +654,3 @@ const setActive = (model: ModelResult, dim?: number) => {
     </div>
   </section>
 </template>
-
-<style scoped>
-.axis-labels {
-  position: relative;
-  height: 46px;
-  margin-top: 2px;
-}
-
-.axis-label-slot {
-  position: absolute;
-  top: 0;
-  transform: translateX(-50%);
-}
-
-.axis-label-slot:first-child {
-  transform: translateX(0);
-}
-
-.axis-label-slot:last-child {
-  transform: translateX(-100%);
-}
-
-.axis-label-btn {
-  display: inline-block;
-  padding: 2px 0 0;
-  font-size: 10px;
-  line-height: 1.2;
-  text-align: center;
-  white-space: nowrap;
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-}
-
-.axis-label-full {
-  display: none;
-}
-
-.axis-label-short {
-  display: inline-block;
-  transform: rotate(-30deg);
-  transform-origin: top center;
-}
-
-@media (min-width: 640px) {
-  .axis-labels {
-    height: 22px;
-  }
-
-  .axis-label-full {
-    display: inline;
-  }
-
-  .axis-label-short {
-    display: none;
-  }
-}
-</style>
