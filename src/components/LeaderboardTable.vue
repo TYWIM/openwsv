@@ -108,23 +108,23 @@ const toggleDetail = (model: ModelResult) => {
   detailId.value = detailId.value === model.id ? null : model.id;
 };
 
-/** 中性写法：本地专用头 vs 零样本通用模型，两类不可直接等量齐观。 */
+/** Track tag shown on every row: L = supervised local head, Z = zero-shot model. */
 const modeLabel = (mode: string): string => {
   const normalized = mode.toLowerCase();
-  if (normalized === 'local-heads') return 'local-heads';
-  if (normalized === 'zero-shot') return 'zero-shot';
-  return normalized || '—';
+  if (normalized === 'local-heads') return 'L';
+  if (normalized === 'zero-shot') return 'Z';
+  return '—';
 };
 
 const modeTitle = (mode: string): string => {
   const normalized = mode.toLowerCase();
   if (normalized === 'local-heads') {
-    return 'Supervised dedicated head (local-heads): fitted on the training set, not directly comparable to zero-shot general models.';
+    return 'Track L: supervised dedicated head (local-heads), trained on the in-domain split.';
   }
   if (normalized === 'zero-shot') {
-    return 'Zero-shot general model (zero-shot): runs directly against a cloud API, with no training on this benchmark.';
+    return 'Track Z: zero-shot general model (zero-shot), with no training on this benchmark.';
   }
-  return 'Entrant type not specified.';
+  return 'Track not specified.';
 };
 
 const latencyTooltip =
@@ -323,14 +323,10 @@ const metricGroups = (model: ModelResult): MetricGroup[] => {
       </button>
     </div>
 
-    <!-- Entrant-type notice: dedicated heads vs zero-shot -->
+    <!-- Track notice: dedicated heads vs zero-shot -->
     <p v-if="mixedEntrantTypes" class="text-[12px] leading-relaxed text-muted-foreground">
-      There are two entrant types:
-      <span class="font-mono text-foreground">local-heads</span> (supervised dedicated heads) and
-      <span class="font-mono text-foreground">zero-shot</span> (zero-shot general models).
-      They are not directly interchangeable (dedicated heads have seen the training set, zero-shot
-      models have not); the composite only aggregates on a common scale. Under a different
-      weighting, cloud ranks can swap while the local row stays first — see the reliability report.
+      Local heads were trained on the in-domain split; zero-shot models have never seen it. Both
+      tracks are listed side by side; the composite does not mix scores across tracks.
     </p>
 
     <!-- 表格 -->
@@ -419,11 +415,13 @@ const metricGroups = (model: ModelResult): MetricGroup[] => {
                   </span>
                 </div>
 
-                <!-- Mobile 子行 -->
+                <!-- Mobile sub-row -->
                 <div class="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-mono text-muted-foreground md:hidden">
                   <span>Score: <strong class="text-foreground">{{ fmtPct(primaryScore(m)) }}</strong></span>
                   <span>·</span>
                   <span :title="latencyTooltip">{{ fmtLatency(m.latency) }}</span>
+                  <span>·</span>
+                  <span :title="modeTitle(m.mode)">Track {{ modeLabel(m.mode) }}</span>
                 </div>
               </td>
 
@@ -482,8 +480,8 @@ const metricGroups = (model: ModelResult): MetricGroup[] => {
                       <span class="font-mono text-foreground">Weights:</span> {{ weightsLabel(m) }}
                     </p>
                     <p v-if="m.composite" class="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                      The composite depends on the weights: under a different weighting, cloud ranks
-                      can swap while the local row stays first; see the reliability report.
+                      The composite depends on the weights; the full weighting sweep is covered in
+                      the reliability report.
                     </p>
                     <p v-if="meta.composite?.note" class="mt-1 text-[11px] leading-relaxed text-muted-foreground/80">
                       {{ meta.composite.note }}
@@ -622,8 +620,7 @@ const metricGroups = (model: ModelResult): MetricGroup[] => {
       The top two, {{ topTwo.first.name }} / {{ topTwo.second.name }}, score
       {{ fmtPct(primaryScore(topTwo.first)) }} : {{ fmtPct(primaryScore(topTwo.second)) }},
       a gap of {{ topTwo.gap.toFixed(1) }} points — effectively a tie. The composite depends on the
-      weights: under a different weighting cloud ranks can swap, while the local row stays first; see
-      the reliability report.
+      weights; the full weighting sweep is covered in the reliability report.
     </p>
   </div>
 </template>
