@@ -31,18 +31,18 @@ python -m starlife_eval leaderboard --run runs/v2g_real \
   `score`（可比事件分）等旧字段**保留**为展开明细，没有删除。
   综合分口径来自 `meta.composite`（等权、缺项自动从分母剔除），见下节契约。
 - 页面展示综合分、7 维分解与每个事件的端到端延迟（含特征抽取 / API 往返；云端受网络与输出长度影响）。
-- 榜单上方是 **按场景复杂度分档的趋势图**：X 轴为 4 个 GT 难度档（**左 = 档 4 最难 → 右 = 档 1 最易**，每档 15 对），
-  Y 轴 **60–100** 分档综合分；低于 60 的点钳制画在 60 底线上并标成 `▼`，tooltip 仍显示真实值
-  （档 4 的 `deepseek-flash` 即 56.1）。每个模型一条折线（本地头加粗置顶、零样本细线/80% 透明度），
-  支持家族筛选、只看 Top 6 / 全部、图例点击显隐、右侧综合分排名与 hover/focus tooltip
-  （模型、档位 + n、分档综合分、该档 7 维明细）。延迟只保留在表格列里，不进入该图。
-  趋势数据来自 `src/data/difficulty_curve.json`，由 `reports/v1.4/difficulty_curve.json`
-  （`generatedFrom: reports/v1.4/report.json`）生成后拷入前端，不是前端计算。
+- 榜单上方是 **横向综合分条形图**：卡片顶部 8 个分段按钮（`综合分` + 7 个分维度），
+  默认展示综合分，切换后按该指标从高到低重排，柱子宽度 300ms 过渡；每行一个模型，
+  行标签为模型名，条末端右侧标数值（1 位小数），某维度 `available: false` 时显示灰条 + `N/A`。
+  本地 `starlife-v1-wsv` 用高亮蓝加粗突出，其余 10 个统一低饱和蓝灰；不按家族上色，
+  hover 行只做高亮、不弹 tooltip。底部 0/25/50/75/100 浅灰网格，无上/右边框。
+  数据全部来自 `src/data/leaderboard.generated.json` 的 `compositeScore` 与 `composite.dims[]`。
+  后端另有 `reports/v1.4/difficulty_curve.json` 诊断数据（按 GT 难度分档的趋势），**当前 UI 不展示**。
 - 数值口径见 `starlife_eval/ARCHITECTURE.md` §5.6：`score = 100 × event.macro_f1_common`、
   `topologyF1 = 100 × relation_type_acc`、`affordanceAcc = 100 × attrs_acc`、
   `stateTransitionAcc = 100 × change_top1`。
 - **null 语义**：任何数值字段为 `null` 表示"该维度没有真实测量值"，前端渲染为 `N/A`，
-  趋势图在该档/该维度跳过绘制，绝不显示 0 或占位值。
+  条形图用灰条占位，绝不显示 0 或把缺项当 0 分。
 - `leaderboard.generated.json` 缺失或 `models: []` 时，页面显示"尚无评测结果"空态，不白屏。
 
 > `src/data/leaderboard.generated.json` 里若出现 `_note: "SAMPLE for dev only…"`，
@@ -157,7 +157,7 @@ python -m starlife_eval leaderboard --run runs/v2g_real \
 - `score`/`topologyF1`/`affordanceAcc`/`stateTransitionAcc` 是 **0–100 的百分数**（§5.6 映射），
   现在作为**明细**保留；`metrics.*` 是 0–1 比例，UI 展开明细时显示为百分比。
   UI 的旧字段/明细数值全部直接读该 JSON，不手抄。
-- 数值字段允许 `null`；`null` 在 UI 渲染为 `N/A`，趋势图跳过该档/该维度的绘制。
+- 数值字段允许 `null`；`null` 在 UI 渲染为 `N/A`，条形图用灰条占位。
 - `metrics` 可选，表格行可展开查看明细；缺失（或某分组为 `null`）时对应分组不显示。
   注意 `metrics.state` 是**数字**（state_acc），`head`/`pair`/`event` 是对象。
 - `version`/`isBest` 用于筛选与强调；`confidence` 目前恒为 `null`（未做 95% bootstrap），UI 隐藏。
