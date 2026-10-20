@@ -11,7 +11,7 @@ import { METHODOLOGY_POINTS } from '../data/benchmarkData';
             Evaluation Protocol
           </div>
           <h2 class="text-2xl sm:text-3xl font-medium tracking-tight text-foreground leading-tight">
-            How the StarLife-1-WSV observation model is evaluated
+            How this spatial &amp; relational benchmark is scored
           </h2>
           <p class="text-sm text-muted-foreground leading-relaxed text-pretty">
             Every number on this page comes from a real evaluation run over the

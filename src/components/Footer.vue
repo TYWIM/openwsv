@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { BENCHMARK_TITLE } from '../data/benchmarkData';
 </script>
 
 <template>
@@ -23,7 +24,7 @@
               <line x1="30" y1="10" x2="2" y2="22" />
             </svg>
             <span class="text-base font-semibold tracking-tight text-foreground">
-              StarLife-1-WSV — Evaluation
+              {{ BENCHMARK_TITLE }}
             </span>
           </div>
           <p class="text-xs text-muted-foreground font-mono">
@@ -43,7 +44,7 @@
             <a href="#protocol" class="hover:text-foreground transition-colors">Protocol</a>
           </div>
           <div class="text-[11px] text-muted-foreground/80">
-            © 2026 StarLife AI. Evaluation artifacts only — no placeholder scores.
+            Benchmark artifacts only — no placeholder scores.
           </div>
         </div>
       </div>

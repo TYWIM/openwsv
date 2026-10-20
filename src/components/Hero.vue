@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { TELEMETRY_STATS, LEADERBOARD_META, GENERATED_AT_LABEL } from '../data/benchmarkData';
+import {
+  BENCHMARK_POSITIONING,
+  BENCHMARK_SUBTITLE,
+  BENCHMARK_TITLE,
+  COMPOSITE_FORMULA,
+  TELEMETRY_STATS,
+  LEADERBOARD_META,
+  GENERATED_AT_LABEL,
+} from '../data/benchmarkData';
 import { ArrowDownRight, Layers, FlaskConical, Ruler } from 'lucide-vue-next';
 
 defineEmits<{
@@ -25,7 +33,7 @@ const releaseLabel = computed(() => {
     <div class="max-w-5xl mx-auto px-4 sm:px-6 pt-16 sm:pt-20 pb-12 sm:pb-16">
       <div class="flex items-end justify-between gap-6 border-b border-border pb-7 sm:pb-8">
         <div class="flex flex-col gap-3">
-          <h1 class="text-[40px] sm:text-[60px] leading-none font-medium tracking-tight flex items-center gap-3 sm:gap-4">
+          <h1 class="text-[40px] sm:text-[56px] leading-none font-medium tracking-tight flex items-center gap-3 sm:gap-4">
             <svg
               viewBox="0 0 48 48"
               fill="none"
@@ -43,12 +51,12 @@ const releaseLabel = computed(() => {
               <line x1="42" y1="16" x2="6" y2="32" />
               <circle cx="24" cy="24" r="3.5" fill="currentColor" />
             </svg>
-            <span>StarLife-1-WSV</span>
+            <span>{{ BENCHMARK_TITLE }}</span>
           </h1>
-          <div class="flex items-center gap-2 text-muted-foreground text-xs sm:text-sm font-mono tracking-wide">
-            <span>Observation Model Evaluation</span>
+          <div class="flex flex-wrap items-center gap-2 text-muted-foreground text-xs sm:text-sm font-mono tracking-wide">
+            <span>{{ BENCHMARK_SUBTITLE }}</span>
             <span class="text-border">|</span>
-            <span class="text-foreground">Five judgement heads on synthetic 3D tabletop scenes</span>
+            <span class="text-foreground">Changes · Relations · Contact / Support · World-state update</span>
           </div>
         </div>
 
@@ -71,11 +79,7 @@ const releaseLabel = computed(() => {
       <div class="mt-7 sm:mt-8">
         <div class="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between sm:gap-12">
           <p class="max-w-2xl text-base sm:text-[17px] text-muted-foreground leading-relaxed text-pretty">
-            Evaluation of the <span class="text-foreground font-medium">StarLife-1-WSV</span> observation
-            model: a frozen multimodal backbone with five classification heads that judge object change,
-            type, spatial relation, relative position and affordance, scored at head level (top-1 /
-            macro-F1), event level (P/R/F1) and world-state replay consistency — plus a 60-pair
-            head-to-head against cloud VLMs replayed from real caches.
+            {{ BENCHMARK_POSITIONING }}
           </p>
 
           <div class="flex flex-wrap items-center gap-3 shrink-0">
@@ -90,6 +94,15 @@ const releaseLabel = computed(() => {
 
             <button
               type="button"
+              @click="$emit('navigate', 'world-model')"
+              class="inline-flex h-10 items-center justify-center gap-2 border border-border bg-background px-4 text-xs sm:text-sm font-medium text-foreground transition-colors hover:bg-accent cursor-pointer"
+            >
+              <span>Where It Fits</span>
+              <Layers class="size-3.5 text-muted-foreground" />
+            </button>
+
+            <button
+              type="button"
               @click="$emit('navigate', 'tasks')"
               class="inline-flex h-10 items-center justify-center gap-2 border border-border bg-background px-4 text-xs sm:text-sm font-medium text-foreground transition-colors hover:bg-accent cursor-pointer"
             >
@@ -99,10 +112,17 @@ const releaseLabel = computed(() => {
           </div>
         </div>
 
+        <!-- 综合分口径（来自后端 meta.composite，缺失回退静态文案） -->
+        <div class="mt-6 border border-border bg-muted/20 px-3.5 py-2.5 text-[12px] leading-relaxed text-muted-foreground">
+          <span class="font-mono text-[11px] uppercase tracking-wider text-foreground">Composite score</span>
+          <span class="mx-2 text-border">|</span>
+          <span>{{ COMPOSITE_FORMULA }}</span>
+        </div>
+
         <div class="mt-8 pt-5 border-t border-border/50 flex flex-wrap items-center gap-y-2 gap-x-6 text-[12px] text-muted-foreground">
           <div class="flex items-center gap-1.5">
             <Layers class="size-3.5 text-foreground" />
-            <span>Frozen Qwen3.8-27B backbone · 5 classification heads</span>
+            <span>Open to zero-shot VLMs and dedicated local heads · same sample, same ground truth</span>
           </div>
           <div class="flex items-center gap-1.5">
             <FlaskConical class="size-3.5 text-foreground" />
@@ -110,7 +130,7 @@ const releaseLabel = computed(() => {
           </div>
           <div class="flex items-center gap-1.5">
             <Ruler class="size-3.5 text-foreground" />
-            <span>Measured latency · unmeasured dimensions rendered as N/A</span>
+            <span>Composite score = 7-dim equal weight · unmeasured dimensions rendered as N/A</span>
           </div>
           <div class="ml-auto font-mono text-[11px] text-muted-foreground/80">
             {{ releaseLabel }}

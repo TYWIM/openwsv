@@ -1,15 +1,34 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 3,
   "meta": {
-    "benchmark": "StarLife-1-WSV 观测模型评测",
+    "benchmark": "空间理解与关系推理基准（Spatial & Relational Understanding Benchmark）",
+    "benchmarkShort": "Spatial & Relational Understanding Benchmark",
+    "scope": {
+      "tested": [
+        "状态估计",
+        "变化识别",
+        "关系与拓扑",
+        "空间方位",
+        "接触/支撑（affordance）",
+        "事件化",
+        "世界状态一致性"
+      ],
+      "not_tested": [
+        "实体类型/词表分类（22 类 type）：云端模型没有类型输出，横向不可比，且不是本基准要测的能力",
+        "token 用量与成本：与「模型会不会空间推理」无关，不进榜单",
+        "生成式未来画面预测（future rollout）：那是世界模型的另一条路线"
+      ],
+      "open_to": "任何能输出逐 slot 变化（appeared/disappeared/displaced/none）与槽位对关系的视觉语言模型；专用头或零样本均可，模型自身架构不限。",
+      "note": "被评对象不止 StarLife：榜单里的本地头模型只是一个条目，云端零样本模型是同类参赛者。"
+    },
     "split": "test",
     "nPairs": 60,
     "nTestPairs": 200,
     "dataset": "dataset_spatial_v2",
     "checkpoints": "checkpoints/pilot_v2g",
     "sampleSeed": 20261020,
-    "generatedAt": "2026-10-20T15:29:27+00:00",
-    "sourceRun": "/workspace/starlife_eval/runs/full_v11",
+    "generatedAt": "2026-10-20T16:15:35+00:00",
+    "sourceRun": "/tmp/sl_runs/full_v13",
     "artifacts": {
       "features_sha256_16": "7b2f0d1d30e7b70d",
       "manifest_sha256_16": "eefc6b3136af0245",
@@ -23,6 +42,57 @@
       "slots": 5830,
       "relations": 2575,
       "models": 6
+    },
+    "composite": {
+      "name": "综合能力分",
+      "method": "equal-weight",
+      "formula": "7 个维度（0-100）等权平均；缺项自动从分母剔除，不当 0 分",
+      "n_dims": 7,
+      "dims": [
+        {
+          "key": "change_top1",
+          "group": "变化识别",
+          "label": "变化识别 top1",
+          "source": "pair_protocol.change_top1"
+        },
+        {
+          "key": "change_balance",
+          "group": "变化平衡性",
+          "label": "变化平衡性 (macroF1)",
+          "source": "pair_protocol.change_macro_f1"
+        },
+        {
+          "key": "relation_type",
+          "group": "关系类型",
+          "label": "关系类型准确率",
+          "source": "pair_protocol.relation_type_acc"
+        },
+        {
+          "key": "rel_pos",
+          "group": "空间方位",
+          "label": "空间方位准确率",
+          "source": "pair_protocol.rel_pos_acc"
+        },
+        {
+          "key": "attrs",
+          "group": "接触支撑",
+          "label": "接触/支撑准确率",
+          "source": "pair_protocol.attrs_acc"
+        },
+        {
+          "key": "event_f1",
+          "group": "事件级 F1",
+          "label": "事件级 F1",
+          "source": "event_metrics.macro_f1_common"
+        },
+        {
+          "key": "state_consistency",
+          "group": "世界状态一致性",
+          "label": "世界状态一致性",
+          "source": "state_replay.state_acc_common"
+        }
+      ],
+      "note": "总分依赖权重；这里用等权并公开逐维分数，任何人都能按自己的场景重算。"
     }
   },
   "models": [
@@ -33,23 +103,100 @@
       "provider": "StarLife AI",
       "providerColor": "var(--color-starlife)",
       "mode": "LOCAL-HEADS",
+      "compositeScore": 83.7,
+      "composite": {
+        "score": 83.7,
+        "method": "equal-weight",
+        "formula": "7 个维度（0-100）等权平均；缺项自动从分母剔除，不当 0 分",
+        "weights": [
+          0.142857,
+          0.142857,
+          0.142857,
+          0.142857,
+          0.142857,
+          0.142857,
+          0.142857
+        ],
+        "available": 7,
+        "total": 7,
+        "missing": [],
+        "dims": [
+          {
+            "key": "change_top1",
+            "group": "变化识别",
+            "label": "变化识别 top1",
+            "value": 92.8,
+            "source": "pair_protocol.change_top1",
+            "available": true
+          },
+          {
+            "key": "change_balance",
+            "group": "变化平衡性",
+            "label": "变化平衡性 (macroF1)",
+            "value": 66.3,
+            "source": "pair_protocol.change_macro_f1",
+            "available": true
+          },
+          {
+            "key": "relation_type",
+            "group": "关系类型",
+            "label": "关系类型准确率",
+            "value": 90.9,
+            "source": "pair_protocol.relation_type_acc",
+            "available": true
+          },
+          {
+            "key": "rel_pos",
+            "group": "空间方位",
+            "label": "空间方位准确率",
+            "value": 71.2,
+            "source": "pair_protocol.rel_pos_acc",
+            "available": true
+          },
+          {
+            "key": "attrs",
+            "group": "接触支撑",
+            "label": "接触/支撑准确率",
+            "value": 97.2,
+            "source": "pair_protocol.attrs_acc",
+            "available": true
+          },
+          {
+            "key": "event_f1",
+            "group": "事件级 F1",
+            "label": "事件级 F1",
+            "value": 75.4,
+            "source": "event_metrics.macro_f1_common",
+            "available": true
+          },
+          {
+            "key": "state_consistency",
+            "group": "世界状态一致性",
+            "label": "世界状态一致性",
+            "value": 92.4,
+            "source": "state_replay.state_acc_common",
+            "available": true
+          }
+        ],
+        "state_dims_used": [
+          "objects",
+          "changes",
+          "relations",
+          "attrs"
+        ]
+      },
       "score": 75.4,
       "topologyF1": 90.9,
       "affordanceAcc": 97.2,
       "stateTransitionAcc": 92.8,
       "latency": 1716.8,
-      "cost": 0.0,
-      "tokens": null,
-      "tokenNum": null,
       "confidence": null,
-      "version": "v1.1",
+      "version": "v1.3",
       "isBest": true,
       "metrics": {
         "head": {
           "change_top1": 0.936480686695279,
           "change_macro_f1": 0.7232061548123724,
-          "type_top1": 0.9450643776824035,
-          "type_macro_f1": 0.9337140904938416,
           "relation_top1": 0.7934306569343066,
           "relation_macro_f1": 0.7863756305369575,
           "rel_pos_top1": 0.6878402903811253,
@@ -90,23 +237,100 @@
       "provider": "StarLife AI",
       "providerColor": "var(--color-starlife)",
       "mode": "LOCAL-HEADS",
+      "compositeScore": 83.6,
+      "composite": {
+        "score": 83.6,
+        "method": "equal-weight",
+        "formula": "7 个维度（0-100）等权平均；缺项自动从分母剔除，不当 0 分",
+        "weights": [
+          0.142857,
+          0.142857,
+          0.142857,
+          0.142857,
+          0.142857,
+          0.142857,
+          0.142857
+        ],
+        "available": 7,
+        "total": 7,
+        "missing": [],
+        "dims": [
+          {
+            "key": "change_top1",
+            "group": "变化识别",
+            "label": "变化识别 top1",
+            "value": 91.3,
+            "source": "pair_protocol.change_top1",
+            "available": true
+          },
+          {
+            "key": "change_balance",
+            "group": "变化平衡性",
+            "label": "变化平衡性 (macroF1)",
+            "value": 64.1,
+            "source": "pair_protocol.change_macro_f1",
+            "available": true
+          },
+          {
+            "key": "relation_type",
+            "group": "关系类型",
+            "label": "关系类型准确率",
+            "value": 90.3,
+            "source": "pair_protocol.relation_type_acc",
+            "available": true
+          },
+          {
+            "key": "rel_pos",
+            "group": "空间方位",
+            "label": "空间方位准确率",
+            "value": 77.4,
+            "source": "pair_protocol.rel_pos_acc",
+            "available": true
+          },
+          {
+            "key": "attrs",
+            "group": "接触支撑",
+            "label": "接触/支撑准确率",
+            "value": 97.2,
+            "source": "pair_protocol.attrs_acc",
+            "available": true
+          },
+          {
+            "key": "event_f1",
+            "group": "事件级 F1",
+            "label": "事件级 F1",
+            "value": 72.2,
+            "source": "event_metrics.macro_f1_common",
+            "available": true
+          },
+          {
+            "key": "state_consistency",
+            "group": "世界状态一致性",
+            "label": "世界状态一致性",
+            "value": 92.6,
+            "source": "state_replay.state_acc_common",
+            "available": true
+          }
+        ],
+        "state_dims_used": [
+          "objects",
+          "changes",
+          "relations",
+          "attrs"
+        ]
+      },
       "score": 72.2,
       "topologyF1": 90.3,
       "affordanceAcc": 97.2,
       "stateTransitionAcc": 91.3,
       "latency": 1716.8,
-      "cost": 0.0,
-      "tokens": null,
-      "tokenNum": null,
       "confidence": null,
-      "version": "v1.1",
+      "version": "v1.3",
       "isBest": false,
       "metrics": {
         "head": {
           "change_top1": 0.927038626609442,
           "change_macro_f1": 0.6982865282865283,
-          "type_top1": 0.936480686695279,
-          "type_macro_f1": 0.9231299439812843,
           "relation_top1": 0.7744525547445256,
           "relation_macro_f1": 0.770099329287652,
           "rel_pos_top1": 0.7041742286751361,
@@ -147,16 +371,95 @@
       "provider": "OpenAI",
       "providerColor": "var(--color-openai)",
       "mode": "ZERO-SHOT",
+      "compositeScore": 66.6,
+      "composite": {
+        "score": 66.6,
+        "method": "equal-weight",
+        "formula": "7 个维度（0-100）等权平均；缺项自动从分母剔除，不当 0 分",
+        "weights": [
+          0.142857,
+          0.142857,
+          0.142857,
+          0.142857,
+          0.142857,
+          0.142857,
+          0.142857
+        ],
+        "available": 7,
+        "total": 7,
+        "missing": [],
+        "dims": [
+          {
+            "key": "change_top1",
+            "group": "变化识别",
+            "label": "变化识别 top1",
+            "value": 93.7,
+            "source": "pair_protocol.change_top1",
+            "available": true
+          },
+          {
+            "key": "change_balance",
+            "group": "变化平衡性",
+            "label": "变化平衡性 (macroF1)",
+            "value": 84.1,
+            "source": "pair_protocol.change_macro_f1",
+            "available": true
+          },
+          {
+            "key": "relation_type",
+            "group": "关系类型",
+            "label": "关系类型准确率",
+            "value": 36.4,
+            "source": "pair_protocol.relation_type_acc",
+            "available": true
+          },
+          {
+            "key": "rel_pos",
+            "group": "空间方位",
+            "label": "空间方位准确率",
+            "value": 40.6,
+            "source": "pair_protocol.rel_pos_acc",
+            "available": true
+          },
+          {
+            "key": "attrs",
+            "group": "接触支撑",
+            "label": "接触/支撑准确率",
+            "value": 95.3,
+            "source": "pair_protocol.attrs_acc",
+            "available": true
+          },
+          {
+            "key": "event_f1",
+            "group": "事件级 F1",
+            "label": "事件级 F1",
+            "value": 52.4,
+            "source": "event_metrics.macro_f1_common",
+            "available": true
+          },
+          {
+            "key": "state_consistency",
+            "group": "世界状态一致性",
+            "label": "世界状态一致性",
+            "value": 63.4,
+            "source": "state_replay.state_acc_common",
+            "available": true
+          }
+        ],
+        "state_dims_used": [
+          "objects",
+          "changes",
+          "relations",
+          "attrs"
+        ]
+      },
       "score": 52.4,
       "topologyF1": 36.4,
       "affordanceAcc": 95.3,
       "stateTransitionAcc": 93.7,
       "latency": 44830.8,
-      "cost": null,
-      "tokens": "191.9k",
-      "tokenNum": 191861,
       "confidence": null,
-      "version": "v1.1",
+      "version": "v1.3",
       "isBest": false,
       "metrics": {
         "head": null,
@@ -190,46 +493,125 @@
       }
     },
     {
-      "id": "qwen3.8-flash",
-      "name": "qwen3.8-flash",
-      "family": "Qwen",
-      "provider": "Qwen",
-      "providerColor": "var(--color-qwen)",
+      "id": "gemini-3.8-flash",
+      "name": "gemini-3.8-flash",
+      "family": "Google",
+      "provider": "Google",
+      "providerColor": "var(--color-gemini)",
       "mode": "ZERO-SHOT",
-      "score": 50.0,
-      "topologyF1": 30.7,
-      "affordanceAcc": 86.1,
-      "stateTransitionAcc": 94.0,
-      "latency": 40904.7,
-      "cost": null,
-      "tokens": "289.3k",
-      "tokenNum": 289288,
+      "compositeScore": 65.6,
+      "composite": {
+        "score": 65.6,
+        "method": "equal-weight",
+        "formula": "7 个维度（0-100）等权平均；缺项自动从分母剔除，不当 0 分",
+        "weights": [
+          0.142857,
+          0.142857,
+          0.142857,
+          0.142857,
+          0.142857,
+          0.142857,
+          0.142857
+        ],
+        "available": 7,
+        "total": 7,
+        "missing": [],
+        "dims": [
+          {
+            "key": "change_top1",
+            "group": "变化识别",
+            "label": "变化识别 top1",
+            "value": 91.1,
+            "source": "pair_protocol.change_top1",
+            "available": true
+          },
+          {
+            "key": "change_balance",
+            "group": "变化平衡性",
+            "label": "变化平衡性 (macroF1)",
+            "value": 78.7,
+            "source": "pair_protocol.change_macro_f1",
+            "available": true
+          },
+          {
+            "key": "relation_type",
+            "group": "关系类型",
+            "label": "关系类型准确率",
+            "value": 36.4,
+            "source": "pair_protocol.relation_type_acc",
+            "available": true
+          },
+          {
+            "key": "rel_pos",
+            "group": "空间方位",
+            "label": "空间方位准确率",
+            "value": 51.6,
+            "source": "pair_protocol.rel_pos_acc",
+            "available": true
+          },
+          {
+            "key": "attrs",
+            "group": "接触支撑",
+            "label": "接触/支撑准确率",
+            "value": 91.4,
+            "source": "pair_protocol.attrs_acc",
+            "available": true
+          },
+          {
+            "key": "event_f1",
+            "group": "事件级 F1",
+            "label": "事件级 F1",
+            "value": 47.1,
+            "source": "event_metrics.macro_f1_common",
+            "available": true
+          },
+          {
+            "key": "state_consistency",
+            "group": "世界状态一致性",
+            "label": "世界状态一致性",
+            "value": 62.7,
+            "source": "state_replay.state_acc_common",
+            "available": true
+          }
+        ],
+        "state_dims_used": [
+          "objects",
+          "changes",
+          "relations",
+          "attrs"
+        ]
+      },
+      "score": 47.1,
+      "topologyF1": 36.4,
+      "affordanceAcc": 91.4,
+      "stateTransitionAcc": 91.1,
+      "latency": 46186.7,
       "confidence": null,
-      "version": "v1.1",
+      "version": "v1.3",
       "isBest": false,
       "metrics": {
         "head": null,
         "pair": {
-          "change_top1": 0.9395,
-          "change_macro_f1": 0.8204,
-          "relation_type_acc": 0.3068,
-          "rel_pos_acc": 0.4074,
-          "attrs_acc": 0.8611
+          "change_top1": 0.9107,
+          "change_macro_f1": 0.7871,
+          "relation_type_acc": 0.3636,
+          "rel_pos_acc": 0.5156,
+          "attrs_acc": 0.9141
         },
         "event": {
-          "macro_f1": 0.500432549835263,
-          "macro_f1_common": 0.500432549835263,
+          "macro_f1": 0.47118063314711356,
+          "macro_f1_common": 0.47118063314711356,
           "common_kinds": [
             "StateChanged",
             "RelationAdded"
           ],
-          "matched_total": 100,
+          "matched_total": 108,
           "available_kinds": [
             "StateChanged",
             "RelationAdded"
           ]
         },
-        "state": 0.6038402388826684
+        "state": 0.6274241847946729
       },
       "na": {
         "live": "本次为离线缓存回放（--live 未开启），未发生网络调用",
@@ -245,16 +627,95 @@
       "provider": "DeepSeek",
       "providerColor": "var(--color-deepseek)",
       "mode": "ZERO-SHOT",
+      "compositeScore": 64.2,
+      "composite": {
+        "score": 64.2,
+        "method": "equal-weight",
+        "formula": "7 个维度（0-100）等权平均；缺项自动从分母剔除，不当 0 分",
+        "weights": [
+          0.142857,
+          0.142857,
+          0.142857,
+          0.142857,
+          0.142857,
+          0.142857,
+          0.142857
+        ],
+        "available": 7,
+        "total": 7,
+        "missing": [],
+        "dims": [
+          {
+            "key": "change_top1",
+            "group": "变化识别",
+            "label": "变化识别 top1",
+            "value": 92.5,
+            "source": "pair_protocol.change_top1",
+            "available": true
+          },
+          {
+            "key": "change_balance",
+            "group": "变化平衡性",
+            "label": "变化平衡性 (macroF1)",
+            "value": 77.8,
+            "source": "pair_protocol.change_macro_f1",
+            "available": true
+          },
+          {
+            "key": "relation_type",
+            "group": "关系类型",
+            "label": "关系类型准确率",
+            "value": 27.8,
+            "source": "pair_protocol.relation_type_acc",
+            "available": true
+          },
+          {
+            "key": "rel_pos",
+            "group": "空间方位",
+            "label": "空间方位准确率",
+            "value": 49.0,
+            "source": "pair_protocol.rel_pos_acc",
+            "available": true
+          },
+          {
+            "key": "attrs",
+            "group": "接触支撑",
+            "label": "接触/支撑准确率",
+            "value": 92.9,
+            "source": "pair_protocol.attrs_acc",
+            "available": true
+          },
+          {
+            "key": "event_f1",
+            "group": "事件级 F1",
+            "label": "事件级 F1",
+            "value": 48.7,
+            "source": "event_metrics.macro_f1_common",
+            "available": true
+          },
+          {
+            "key": "state_consistency",
+            "group": "世界状态一致性",
+            "label": "世界状态一致性",
+            "value": 60.4,
+            "source": "state_replay.state_acc_common",
+            "available": true
+          }
+        ],
+        "state_dims_used": [
+          "objects",
+          "changes",
+          "relations",
+          "attrs"
+        ]
+      },
       "score": 48.7,
       "topologyF1": 27.8,
       "affordanceAcc": 92.9,
       "stateTransitionAcc": 92.5,
       "latency": 6406.8,
-      "cost": null,
-      "tokens": "163.9k",
-      "tokenNum": 163880,
       "confidence": null,
-      "version": "v1.1",
+      "version": "v1.3",
       "isBest": false,
       "metrics": {
         "head": null,
@@ -287,46 +748,125 @@
       }
     },
     {
-      "id": "gemini-3.8-flash",
-      "name": "gemini-3.8-flash",
-      "family": "Google",
-      "provider": "Google",
-      "providerColor": "var(--color-gemini)",
+      "id": "qwen3.8-flash",
+      "name": "qwen3.8-flash",
+      "family": "Qwen",
+      "provider": "Qwen",
+      "providerColor": "var(--color-qwen)",
       "mode": "ZERO-SHOT",
-      "score": 47.1,
-      "topologyF1": 36.4,
-      "affordanceAcc": 91.4,
-      "stateTransitionAcc": 91.1,
-      "latency": 46186.7,
-      "cost": null,
-      "tokens": "210.4k",
-      "tokenNum": 210387,
+      "compositeScore": 63.4,
+      "composite": {
+        "score": 63.4,
+        "method": "equal-weight",
+        "formula": "7 个维度（0-100）等权平均；缺项自动从分母剔除，不当 0 分",
+        "weights": [
+          0.142857,
+          0.142857,
+          0.142857,
+          0.142857,
+          0.142857,
+          0.142857,
+          0.142857
+        ],
+        "available": 7,
+        "total": 7,
+        "missing": [],
+        "dims": [
+          {
+            "key": "change_top1",
+            "group": "变化识别",
+            "label": "变化识别 top1",
+            "value": 94.0,
+            "source": "pair_protocol.change_top1",
+            "available": true
+          },
+          {
+            "key": "change_balance",
+            "group": "变化平衡性",
+            "label": "变化平衡性 (macroF1)",
+            "value": 82.0,
+            "source": "pair_protocol.change_macro_f1",
+            "available": true
+          },
+          {
+            "key": "relation_type",
+            "group": "关系类型",
+            "label": "关系类型准确率",
+            "value": 30.7,
+            "source": "pair_protocol.relation_type_acc",
+            "available": true
+          },
+          {
+            "key": "rel_pos",
+            "group": "空间方位",
+            "label": "空间方位准确率",
+            "value": 40.7,
+            "source": "pair_protocol.rel_pos_acc",
+            "available": true
+          },
+          {
+            "key": "attrs",
+            "group": "接触支撑",
+            "label": "接触/支撑准确率",
+            "value": 86.1,
+            "source": "pair_protocol.attrs_acc",
+            "available": true
+          },
+          {
+            "key": "event_f1",
+            "group": "事件级 F1",
+            "label": "事件级 F1",
+            "value": 50.0,
+            "source": "event_metrics.macro_f1_common",
+            "available": true
+          },
+          {
+            "key": "state_consistency",
+            "group": "世界状态一致性",
+            "label": "世界状态一致性",
+            "value": 60.4,
+            "source": "state_replay.state_acc_common",
+            "available": true
+          }
+        ],
+        "state_dims_used": [
+          "objects",
+          "changes",
+          "relations",
+          "attrs"
+        ]
+      },
+      "score": 50.0,
+      "topologyF1": 30.7,
+      "affordanceAcc": 86.1,
+      "stateTransitionAcc": 94.0,
+      "latency": 40904.7,
       "confidence": null,
-      "version": "v1.1",
+      "version": "v1.3",
       "isBest": false,
       "metrics": {
         "head": null,
         "pair": {
-          "change_top1": 0.9107,
-          "change_macro_f1": 0.7871,
-          "relation_type_acc": 0.3636,
-          "rel_pos_acc": 0.5156,
-          "attrs_acc": 0.9141
+          "change_top1": 0.9395,
+          "change_macro_f1": 0.8204,
+          "relation_type_acc": 0.3068,
+          "rel_pos_acc": 0.4074,
+          "attrs_acc": 0.8611
         },
         "event": {
-          "macro_f1": 0.47118063314711356,
-          "macro_f1_common": 0.47118063314711356,
+          "macro_f1": 0.500432549835263,
+          "macro_f1_common": 0.500432549835263,
           "common_kinds": [
             "StateChanged",
             "RelationAdded"
           ],
-          "matched_total": 108,
+          "matched_total": 100,
           "available_kinds": [
             "StateChanged",
             "RelationAdded"
           ]
         },
-        "state": 0.6274241847946729
+        "state": 0.6038402388826684
       },
       "na": {
         "live": "本次为离线缓存回放（--live 未开启），未发生网络调用",

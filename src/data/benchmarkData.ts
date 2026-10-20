@@ -10,14 +10,36 @@
  */
 
 import {
+  BENCHMARK_POSITIONING,
+  BENCHMARK_SUBTITLE,
+  BENCHMARK_TITLE,
+  COMPOSITE_DIM_GUIDE,
+  COMPOSITE_DIM_ORDER,
+  COMPOSITE_FORMULA_FALLBACK,
   METHODOLOGY_POINTS,
   TASK_EXAMPLES,
+  WORLD_MODEL_LAYERS,
+  WORLD_MODEL_SCOPE,
+  type CompositeDimGuide,
+  type CompositeDimKey,
   type MethodologyPoint,
   type TaskExample,
+  type WorldModelLayer,
 } from './benchmarkContent';
 
-export { METHODOLOGY_POINTS, TASK_EXAMPLES };
-export type { MethodologyPoint, TaskExample };
+export {
+  BENCHMARK_POSITIONING,
+  BENCHMARK_SUBTITLE,
+  BENCHMARK_TITLE,
+  COMPOSITE_DIM_GUIDE,
+  COMPOSITE_DIM_ORDER,
+  COMPOSITE_FORMULA_FALLBACK,
+  METHODOLOGY_POINTS,
+  TASK_EXAMPLES,
+  WORLD_MODEL_LAYERS,
+  WORLD_MODEL_SCOPE,
+};
+export type { CompositeDimGuide, CompositeDimKey, MethodologyPoint, TaskExample, WorldModelLayer };
 
 // ---------------------------------------------------------------- model 数据
 
@@ -50,10 +72,14 @@ export interface ModelResult {
   providerColor: string;
   mode: string;
   /**
-   * 事件级 macro-F1 × 100（ARCHITECTURE §5.6）。
+   * 事件级 macro-F1 × 100（ARCHITECTURE §5.6），作为**明细**保留。
    * null = 事件级指标不可用。
    */
   score: number | null;
+  /** 榜单主分：7 维等权综合分（0–100）；null = 后端未提供综合分。 */
+  compositeScore: number | null;
+  /** 综合分的构成（7 个维度、权重、公式）；null = 旧版数据没有该段。 */
+  composite: Composite | null;
   /** 95% bootstrap CI；当前没有测，恒为 null，UI 隐藏。 */
   confidence: number | null;
   /** 100 × pair_protocol.relation_type_acc */
@@ -62,22 +88,37 @@ export interface ModelResult {
   affordanceAcc: number | null;
   /** 100 × pair_protocol.change_top1 */
   stateTransitionAcc: number | null;
-  /** $ per task；本地自有硬件为 0，云端无计费口径为 null。 */
-  cost: number | null;
-  /** 展示用 token 数，如 "1.2k"；本地头无 token 口径为 null。 */
-  tokens: string | null;
-  /** 真实 token 数；未知为 null。 */
-  tokenNum: number | null;
-  /** 实测毫秒延迟。 */
+  /** 实测毫秒延迟（每事件端到端，含特征抽取 / API 往返）。唯一的运行时指标。 */
   latency: number | null;
   /** 明细指标（表格行可展开）；后端未提供则为 null。 */
   metrics: ModelMetrics | null;
   /** 评测版本标签。真实数据当前统一为 v1.1；保留字段用于后续对照。 */
   version: string;
-  /** 同 family 内 score 最高的模型（后端提供；缺失时前端按 score 推导）。 */
+  /** 同 family 内综合分最高的模型（后端提供；缺失时前端按综合分推导）。 */
   isBest: boolean;
-  /** 字段级 N/A 原因，例如 { "cost": "云端无公开计价口径" }。 */
+  /** 字段级 N/A 原因（只保留与本基准相关的口径说明，例如 head-level 未测）。 */
   na: Record<string, string>;
+}
+
+/** 综合分的一个维度（数值已经 ×100，0–100）。 */
+export interface CompositeDim {
+  key: CompositeDimKey;
+  /** 中文短语：变化识别 / 变化平衡性 / 关系类型 / 空间方位 / 接触支撑 / 事件级F1 / 世界状态一致性 */
+  group: string;
+  /** 表格列头用的短名 */
+  label: string;
+  value: number;
+  /** 口径出处，如 "pair_protocol.change_top1" */
+  source: string;
+  available: boolean;
+}
+
+export interface Composite {
+  method: string;
+  weights: number[];
+  available: number;
+  total: number;
+  dims: CompositeDim[];
 }
 
 // --------------------------------------------------------------- 榜单元信息
@@ -92,6 +133,27 @@ export interface LeaderboardMeta {
   sampleSeed: number | null;
   generatedAt: string | null;
   sourceRun: string | null;
+  /** 综合分口径（后端 meta.composite）；旧版数据为 null。 */
+  composite: CompositeMeta | null;
+  /** 基准范围（后端 meta.scope）：测什么 / 不测什么 / 对谁开放。 */
+  scope: BenchmarkScope | null;
+}
+
+export interface BenchmarkScope {
+  tested: string[];
+  notTested: string[];
+  openTo: string;
+  /** 后端对"被评对象不止一个"的补充说明（meta.scope.note）。 */
+  note: string;
+}
+
+export interface CompositeMeta {
+  name: string;
+  method: string;
+  dims: number;
+  formula: string;
+  /** 后端对"综合分依赖权重"的说明（meta.composite.note）。 */
+  note: string;
 }
 
 export interface TelemetryStat {
@@ -109,13 +171,12 @@ interface RawModel {
   providerColor?: unknown;
   mode?: unknown;
   score?: unknown;
+  compositeScore?: unknown;
+  composite?: unknown;
   confidence?: unknown;
   topologyF1?: unknown;
   affordanceAcc?: unknown;
   stateTransitionAcc?: unknown;
-  cost?: unknown;
-  tokens?: unknown;
-  tokenNum?: unknown;
   latency?: unknown;
   metrics?: unknown;
   version?: unknown;
@@ -257,11 +318,54 @@ const rawModelList: unknown[] = Array.isArray(rawFile)
 
 // ------------------------------------------------------------- 榜单模型列表
 
+const normalizeCompositeDim = (raw: unknown): CompositeDim | null => {
+  if (!isRecord(raw)) return null;
+  const key = toStr(raw.key, '') as CompositeDimKey;
+  if (!COMPOSITE_DIM_ORDER.includes(key)) return null;
+  const guide = COMPOSITE_DIM_GUIDE[key];
+  const value = toNum(raw.value);
+  return {
+    key,
+    group: toStr(raw.group, guide.group),
+    label: toStr(raw.label, guide.group),
+    value: value ?? 0,
+    source: toStr(raw.source, ''),
+    available: typeof raw.available === 'boolean' ? raw.available : value != null,
+  };
+};
+
+/** 综合分构成：7 维、等权权重、缺项自动从分母剔除。缺失/空段 -> null。 */
+const normalizeComposite = (raw: unknown): Composite | null => {
+  if (!isRecord(raw)) return null;
+  const dimsRaw = Array.isArray(raw.dims) ? raw.dims : [];
+  const dims = dimsRaw
+    .map(normalizeCompositeDim)
+    .filter((dim): dim is CompositeDim => dim != null);
+  if (dims.length === 0) return null;
+  const weightsRaw = Array.isArray(raw.weights)
+    ? raw.weights.map(toNum).filter((w): w is number => w != null)
+    : [];
+  return {
+    method: toStr(raw.method, 'equal-weight'),
+    weights: weightsRaw,
+    available: toNum(raw.available) ?? dims.filter((dim) => dim.available).length,
+    total: toNum(raw.total) ?? dims.length,
+    dims,
+  };
+};
+
+/**
+ * 榜单主分：优先综合分；旧版数据没有综合分时回退到可比事件分（明细字段），
+ * 保证后端升级完成前页面仍然可读，而不是整列 N/A。
+ */
+export const primaryScore = (model: ModelResult): number | null =>
+  model.compositeScore ?? model.score;
+
 const bestScore = (() => {
   const scores: number[] = [];
   for (const raw of rawModelList) {
     if (!isRecord(raw)) continue;
-    const score = toNum(raw.score);
+    const score = toNum(raw.compositeScore) ?? toNum(raw.score);
     if (score != null) scores.push(score);
   }
   return scores.length > 0 ? Math.max(...scores) : null;
@@ -271,7 +375,9 @@ const normalizeModel = (raw: RawModel): ModelResult => {
   const family = toFamily(raw.family);
   const id = toStr(raw.id, toStr(raw.name, 'unknown-model'));
   const score = toNum(raw.score);
+  const compositeScore = toNum(raw.compositeScore);
   const hasBestFlag = typeof raw.isBest === 'boolean';
+  const bestCandidate = compositeScore ?? score;
   // 颜色以 family 为准（family 是分类口径，颜色只是它的视觉映射）；后端若给了
   // providerColor 只在 family 未识别（Community/自定义）时作为兜底。
   const providerColor =
@@ -284,17 +390,16 @@ const normalizeModel = (raw: RawModel): ModelResult => {
     providerColor,
     mode: toStr(raw.mode, '—'),
     score,
+    compositeScore,
+    composite: normalizeComposite(raw.composite),
     confidence: toNum(raw.confidence),
     topologyF1: toNum(raw.topologyF1),
     affordanceAcc: toNum(raw.affordanceAcc),
     stateTransitionAcc: toNum(raw.stateTransitionAcc),
-    cost: toNum(raw.cost),
-    tokens: typeof raw.tokens === 'string' && raw.tokens.trim() !== '' ? raw.tokens : null,
-    tokenNum: toNum(raw.tokenNum),
     latency: toNum(raw.latency),
     metrics: normalizeMetrics(raw.metrics),
     version: toStr(raw.version, 'v1.1'),
-    isBest: hasBestFlag ? raw.isBest === true : score != null && score === bestScore,
+    isBest: hasBestFlag ? raw.isBest === true : bestCandidate != null && bestCandidate === bestScore,
     na: normalizeNa(raw.na),
   };
 };
@@ -316,8 +421,13 @@ export const DATA_VERSIONS: string[] = Array.from(
 const rawMeta =
   !Array.isArray(rawFile) && isRecord(rawFile?.meta) ? rawFile.meta : {};
 
+/** 数据契约版本（后端 schemaVersion）；旧文件为 null。 */
+export const SCHEMA_VERSION: number | null = Array.isArray(rawFile)
+  ? null
+  : toNum(rawFile?.schemaVersion);
+
 export const LEADERBOARD_META: LeaderboardMeta = {
-  benchmark: toStr(rawMeta.benchmark, 'StarLife-1-WSV'),
+  benchmark: toStr(rawMeta.benchmark, '空间理解与关系推理基准'),
   split: toStr(rawMeta.split, '') || null,
   nPairs: toNum(rawMeta.nPairs),
   nTestPairs: toNum(rawMeta.nTestPairs),
@@ -326,7 +436,36 @@ export const LEADERBOARD_META: LeaderboardMeta = {
   sampleSeed: toNum(rawMeta.sampleSeed),
   generatedAt: toStr(rawMeta.generatedAt, '') || null,
   sourceRun: toStr(rawMeta.sourceRun, '') || null,
+  composite: (() => {
+    const raw = isRecord(rawMeta.composite) ? rawMeta.composite : null;
+    if (!raw) return null;
+    return {
+      name: toStr(raw.name, '综合分'),
+      method: toStr(raw.method, 'equal-weight'),
+      dims: toNum(raw.n_dims) ?? toNum(raw.dims) ?? COMPOSITE_DIM_ORDER.length,
+      formula: toStr(raw.formula, COMPOSITE_FORMULA_FALLBACK),
+      note: toStr(raw.note, ''),
+    };
+  })(),
+  scope: (() => {
+    const raw = isRecord(rawMeta.scope) ? rawMeta.scope : null;
+    if (!raw) return null;
+    const toStringArray = (value: unknown): string[] =>
+      Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
+        : [];
+    return {
+      tested: toStringArray(raw.tested),
+      notTested: toStringArray(raw.notTested ?? raw.not_tested),
+      openTo: toStr(raw.openTo ?? raw.open_to, ''),
+      note: toStr(raw.note, ''),
+    };
+  })(),
 };
+
+/** 综合分公式（优先后端 meta.composite.formula，否则用静态兜底文案）。 */
+export const COMPOSITE_FORMULA: string =
+  LEADERBOARD_META.composite?.formula ?? COMPOSITE_FORMULA_FALLBACK;
 
 /** 生成时间的人读格式；不可解析则 null（UI 隐藏而不是写死日期）。 */
 export const GENERATED_AT_LABEL: string | null = (() => {
@@ -382,19 +521,8 @@ export const fmtNumber = (value: number | null | undefined, digits = 2): string 
 export const fmtPct = (value: number | null | undefined, digits = 1): string =>
   value == null || !Number.isFinite(value) ? NA : `${value.toFixed(digits)}%`;
 
-export const fmtCost = (value: number | null | undefined): string =>
-  value == null || !Number.isFinite(value) ? NA : `$${value.toFixed(2)}`;
-
 export const fmtLatency = (value: number | null | undefined): string =>
   value == null || !Number.isFinite(value) ? NA : `${Math.round(value)}ms`;
-
-export const fmtTokens = (model: Pick<ModelResult, 'tokens' | 'tokenNum'>): string => {
-  if (model.tokens) return model.tokens;
-  if (model.tokenNum == null || !Number.isFinite(model.tokenNum)) return NA;
-  return model.tokenNum >= 1000
-    ? `${(model.tokenNum / 1000).toFixed(1)}k`
-    : String(Math.round(model.tokenNum));
-};
 
 /** 明细指标：0–1 比例自动显示成百分比，其余数字保留两位小数。 */
 export const fmtMetricValue = (value: MetricSectionValue | undefined): string => {
@@ -407,31 +535,24 @@ export const fmtMetricValue = (value: MetricSectionValue | undefined): string =>
 
 // ------------------------------------------------------------ 图表维度支持
 
-export type MetricKey = 'cost' | 'tokens' | 'latency';
+/** 运行时指标只有延迟（每事件端到端）。 */
+export type MetricKey = 'latency';
 
 export const METRIC_LABELS: Record<MetricKey, string> = {
-  cost: 'Cost',
-  tokens: 'Output tokens',
   latency: 'Latency',
 };
 
 export const METRIC_UNAVAILABLE_REASONS: Record<MetricKey, string> = {
-  cost: '无真实成本口径（云端无公开计价，本地自有硬件）',
-  tokens: '无真实 token 统计',
   latency: '无实测延迟',
 };
 
 export const metricValue = (model: ModelResult, metric: MetricKey): number | null => {
-  if (metric === 'cost') return model.cost;
-  if (metric === 'tokens') return model.tokenNum;
-  return model.latency;
+  if (metric === 'latency') return model.latency;
+  return null;
 };
 
 export const hasMetricData = (models: ModelResult[], metric: MetricKey): boolean =>
   models.some((model) => metricValue(model, metric) != null);
 
-/** 默认优先展示测量覆盖最广的维度。 */
 export const firstAvailableMetric = (models: ModelResult[]): MetricKey | null =>
-  (['latency', 'cost', 'tokens'] as MetricKey[]).find((metric) =>
-    hasMetricData(models, metric),
-  ) ?? null;
+  hasMetricData(models, 'latency') ? 'latency' : null;

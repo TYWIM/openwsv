@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { Sun, Moon, Github } from 'lucide-vue-next';
+import { BENCHMARK_TITLE } from '../data/benchmarkData';
 
 const emit = defineEmits<{
   (e: 'navigate', targetId: string): void;
@@ -40,7 +41,7 @@ const toggleTheme = () => {
         <a
           href="/"
           class="flex items-center gap-2.5 text-foreground group"
-          aria-label="StarLife-1-WSV Evaluation Home"
+          aria-label="空间理解与关系推理基准 Home"
         >
           <svg
             class="h-6 w-auto text-foreground shrink-0 transition-transform duration-200 group-hover:scale-105"
@@ -60,16 +61,16 @@ const toggleTheme = () => {
           </svg>
           <div class="flex items-baseline gap-1.5">
             <span class="text-lg sm:text-[20px] font-semibold tracking-[-0.02em] leading-none text-foreground">
-              StarLife-1-WSV
+              {{ BENCHMARK_TITLE }}
             </span>
             <span class="hidden sm:inline-block text-xs font-mono tracking-widest text-muted-foreground uppercase">
-              / Evaluation
+              / Benchmark
             </span>
           </div>
         </a>
         <span class="h-4 w-px bg-border ml-1 hidden sm:block" aria-hidden="true" />
         <span class="hidden sm:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono tracking-wider bg-secondary text-secondary-foreground border border-border">
-          OBSERVATION MODEL
+          OPEN TO ANY VLM
         </span>
       </div>
 

@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import {
-  fmtCost,
+  COMPOSITE_DIM_GUIDE,
+  COMPOSITE_FORMULA,
+  NA,
   fmtLatency,
   fmtMetricValue,
   fmtPct,
-  fmtTokens,
+  primaryScore,
+  type CompositeDim,
   type LeaderboardMeta,
   type ModelMetrics,
   type ModelResult,
@@ -17,6 +20,8 @@ const props = defineProps<{
   activeVersion: string;
   versions: string[];
   meta: LeaderboardMeta;
+  /** 仅用于 SSR/截图验证时预先展开某一行；正常页面不传。 */
+  initialExpandedId?: string;
 }>();
 
 const emit = defineEmits<{
@@ -25,11 +30,12 @@ const emit = defineEmits<{
 
 const searchQuery = ref('');
 const selectedProvider = ref('All');
-const sortField = ref<SortField>('score');
+const sortField = ref<SortField>('composite');
 const sortAsc = ref(false);
-const expandedId = ref<string | null>(null);
+const expandedId = ref<string | null>(props.initialExpandedId ?? null);
+const detailId = ref<string | null>(null);
 
-type SortField = 'name' | 'score' | 'topologyF1' | 'affordanceAcc' | 'stateTransitionAcc' | 'cost' | 'latency';
+type SortField = 'name' | 'composite' | 'latency';
 
 const providers = computed(() => {
   const set = new Set(props.allModels.map((m) => m.provider));
@@ -55,7 +61,8 @@ const filteredModels = computed(() =>
 
 const sortValue = (model: ModelResult, field: SortField): number | string | null => {
   if (field === 'name') return model.name;
-  return model[field];
+  if (field === 'composite') return primaryScore(model);
+  return model.latency;
 };
 
 const sortedModels = computed(() =>
@@ -87,12 +94,90 @@ const handleSort = (field: SortField) => {
 const hasMetrics = (model: ModelResult): boolean =>
   model.metrics != null && Object.keys(model.metrics).length > 0;
 
+/** 综合分构成 / 旧口径明细 / 事件指标，任一存在才允许展开。 */
+const hasDetails = (model: ModelResult): boolean =>
+  model.composite != null || hasMetrics(model) || model.score != null;
+
 const toggleRow = (model: ModelResult) => {
-  if (!hasMetrics(model)) return;
+  if (!hasDetails(model)) return;
   expandedId.value = expandedId.value === model.id ? null : model.id;
+  detailId.value = null;
 };
 
-const SECTION_TITLES: Record<string, string> = {
+const toggleDetail = (model: ModelResult) => {
+  detailId.value = detailId.value === model.id ? null : model.id;
+};
+
+/** 中性写法：本地专用头 vs 零样本通用模型，两类不可直接等量齐观。 */
+const modeLabel = (mode: string): string => {
+  const normalized = mode.toLowerCase();
+  if (normalized === 'local-heads') return 'local-heads';
+  if (normalized === 'zero-shot') return 'zero-shot';
+  return normalized || '—';
+};
+
+const modeTitle = (mode: string): string => {
+  const normalized = mode.toLowerCase();
+  if (normalized === 'local-heads') {
+    return '有监督专用头（local-heads）：在训练集上拟合过，与零样本通用模型不可直接等量齐观。';
+  }
+  if (normalized === 'zero-shot') {
+    return '零样本通用模型（zero-shot）：直接跑云端 API，没有任何针对本基准的训练。';
+  }
+  return '参赛方式未标注。';
+};
+
+const latencyTooltip =
+  '每事件端到端延迟（含特征抽取 / API 往返）；云端受网络与输出长度影响。';
+
+const compositeBarWidth = (value: number | null): string => {
+  if (value == null || !Number.isFinite(value)) return '0%';
+  return `${Math.min(100, Math.max(0, value))}%`;
+};
+
+/** 权重来源说明：等权时明确写"等权，不预设哪个维度更重要"。 */
+const weightsLabel = (model: ModelResult): string | null => {
+  const weights = model.composite?.weights ?? [];
+  if (weights.length === 0) return null;
+  const unique = [...new Set(weights.map((w) => w.toFixed(6)))];
+  if (unique.length <= 1) {
+    return `${weights.length} × ${unique[0]}（等权，不预设哪个维度更重要）`;
+  }
+  return `${weights.map((w) => w.toFixed(4)).join(' / ')}（按权重加权）`;
+};
+
+/** 维度 tooltip：一句话 + 怎么看 + 口径提醒（rel_pos / state_consistency 的口径放这里）。 */
+const dimTitle = (dim: CompositeDim): string => {
+  const guide = COMPOSITE_DIM_GUIDE[dim.key];
+  const lines = [guide.oneLiner, `怎么看：${guide.howToRead}`];
+  if (dim.key === 'rel_pos') {
+    lines.push('口径：只统计关系判定正确后的方位。');
+  }
+  if (dim.key === 'state_consistency') {
+    lines.push('口径：不含实体类别维度。');
+  }
+  return lines.join('\n');
+};
+
+/** 前两名综合分差（由数据算，不手抄）：用于"约等于打平"的中性说明。 */
+const topTwo = computed(() => {
+  const ranked = props.allModels
+    .filter((m) => m.version === props.activeVersion && primaryScore(m) != null)
+    .sort((a, b) => (primaryScore(b) ?? 0) - (primaryScore(a) ?? 0));
+  const first = ranked[0];
+  const second = ranked[1];
+  if (!first || !second) return null;
+  return { first, second, gap: (primaryScore(first) ?? 0) - (primaryScore(second) ?? 0) };
+});
+
+/** 榜单里同时有本地专用头与零样本模型时，明确提示两类不可直接比较。 */
+const mixedEntrantTypes = computed(
+  () => props.allModels.some((m) => m.mode === 'LOCAL-HEADS') && props.allModels.some((m) => m.mode === 'ZERO-SHOT'),
+);
+
+const dimBarWidth = (value: number): string => `${Math.min(100, Math.max(0, value))}%`;
+
+const sectionTitles: Record<string, string> = {
   head: 'Head-level · test split',
   pair: '60-pair cloud protocol',
   event: 'Event-level',
@@ -103,12 +188,10 @@ const METRIC_LABELS: Record<string, string> = {
   change_top1: 'Change top-1',
   change_macro_f1: 'Change macro-F1',
   change_slots: 'Change slots',
-  type_top1: 'Type top-1',
-  type_macro_f1: 'Type macro-F1',
   relation_top1: 'Relation top-1',
   relation_macro_f1: 'Relation macro-F1',
   relation_pairs: 'Relation pairs',
-  relation_type_acc: 'Relation type acc',
+  relation_type_acc: 'Relation class acc',
   rel_pos_top1: 'Rel-pos top-1',
   rel_pos_macro_f1: 'Rel-pos macro-F1',
   rel_pos_acc: 'Rel-pos acc',
@@ -122,7 +205,6 @@ const METRIC_LABELS: Record<string, string> = {
   available_kinds: 'Available kinds',
   matched_total: 'Matched events',
   objects: 'Objects',
-  types: 'Types',
   changes: 'Changes',
   relations: 'Relations',
   state_acc: 'State accuracy',
@@ -131,17 +213,27 @@ const METRIC_LABELS: Record<string, string> = {
 };
 
 const NA_LABELS: Record<string, string> = {
-  score: 'Score',
+  score: 'Comparable event score',
+  compositeScore: 'Composite score',
   topologyF1: 'Topology F1',
   affordanceAcc: 'Affordance',
   stateTransitionAcc: 'State dynamics',
-  cost: 'Cost',
-  tokens: 'Tokens',
   latency: 'Latency',
   head_metrics: 'Head-level metrics',
-  type: 'Type head',
-  'state.types': 'State · types',
 };
+
+/** 只显示与本基准相关的 N/A 原因；旧口径字段名（含类别/用量类）直接过滤掉。 */
+const naEntries = (model: ModelResult): Array<{ key: string; label: string; reason: string }> =>
+  Object.entries(model.na)
+    .filter(([key, reason]) => {
+      const text = `${key} ${reason}`.toLowerCase();
+      return !/(token|cost|type|vocab)/.test(text);
+    })
+    .map(([key, reason]) => ({
+      key,
+      label: NA_LABELS[key] ?? key,
+      reason,
+    }));
 
 interface MetricGroup {
   key: string;
@@ -155,27 +247,22 @@ const metricGroups = (model: ModelResult): MetricGroup[] => {
   const groups: MetricGroup[] = [];
   for (const [section, values] of Object.entries(metrics)) {
     if (!values) continue;
-    const entries = Object.entries(values).map(([key, value]) => ({
-      key,
-      label: METRIC_LABELS[key] ?? key,
-      value: fmtMetricValue(value),
-    }));
+    const entries = Object.entries(values)
+      .filter(([key]) => !/(token|cost|type|vocab)/.test(key))
+      .map(([key, value]) => ({
+        key,
+        label: METRIC_LABELS[key] ?? key,
+        value: fmtMetricValue(value),
+      }));
     if (entries.length === 0) continue;
     groups.push({
       key: section,
-      title: SECTION_TITLES[section] ?? section,
+      title: sectionTitles[section] ?? section,
       entries,
     });
   }
   return groups;
 };
-
-const naEntries = (model: ModelResult): Array<{ key: string; label: string; reason: string }> =>
-  Object.entries(model.na).map(([key, reason]) => ({
-    key,
-    label: NA_LABELS[key] ?? key,
-    reason,
-  }));
 </script>
 
 <template>
@@ -236,50 +323,51 @@ const naEntries = (model: ModelResult): Array<{ key: string; label: string; reas
       </button>
     </div>
 
+    <!-- 参赛方式提示：专用头 vs 零样本 -->
+    <p v-if="mixedEntrantTypes" class="text-[12px] leading-relaxed text-muted-foreground">
+      参赛方式有两类：
+      <span class="font-mono text-foreground">local-heads</span>（有监督专用头）与
+      <span class="font-mono text-foreground">zero-shot</span>（零样本通用模型）。
+      两类不可直接等量齐观（专用头见过训练集、零样本没有）；综合分只做同口径汇总，
+      换一组权重云端名次会互换，本地两行始终第一，详见 reliability 报告。
+    </p>
+
     <!-- 表格 -->
     <div
       tabindex="0"
       role="region"
-      aria-label="StarLife-1-WSV evaluation leaderboard table"
+      aria-label="空间理解与关系推理基准 leaderboard table"
       class="w-full overflow-x-auto border border-border bg-card"
     >
       <table class="w-full text-left text-xs border-collapse">
         <thead>
           <tr class="border-b border-border bg-muted/20 text-muted-foreground font-mono">
             <th class="py-2.5 pl-4 pr-2 w-12 text-center">#</th>
-            <th class="py-2.5 px-3 min-w-[220px]">
+            <th class="py-2.5 px-3 min-w-[210px]">
               <button type="button" @click="handleSort('name')" class="flex items-center gap-1 hover:text-foreground cursor-pointer font-medium">
-                Model
+                Model · 参赛模型
                 <ArrowUpDown class="size-3" />
               </button>
             </th>
-            <th class="py-2.5 px-3 min-w-[240px]">
-              <button type="button" @click="handleSort('score')" class="flex items-center gap-1 hover:text-foreground cursor-pointer font-medium">
-                Event macro-F1
+            <th class="py-2.5 px-3 min-w-[250px]">
+              <button
+                type="button"
+                @click="handleSort('composite')"
+                class="flex items-center gap-1 hover:text-foreground cursor-pointer font-medium"
+                title="7 维等权综合分（0–100）"
+              >
+                综合分 · Composite
                 <ArrowUpDown class="size-3" />
               </button>
             </th>
             <th class="py-2.5 px-3 hidden md:table-cell text-right">
-              <button type="button" @click="handleSort('topologyF1')" class="inline-flex items-center gap-1 hover:text-foreground cursor-pointer font-medium">
-                Topology F1
-                <ArrowUpDown class="size-3" />
-              </button>
-            </th>
-            <th class="py-2.5 px-3 hidden lg:table-cell text-right">
-              <button type="button" @click="handleSort('affordanceAcc')" class="inline-flex items-center gap-1 hover:text-foreground cursor-pointer font-medium">
-                Affordance
-                <ArrowUpDown class="size-3" />
-              </button>
-            </th>
-            <th class="py-2.5 px-3 hidden lg:table-cell text-right">
-              <button type="button" @click="handleSort('stateTransitionAcc')" class="inline-flex items-center gap-1 hover:text-foreground cursor-pointer font-medium">
-                State dynamics
-                <ArrowUpDown class="size-3" />
-              </button>
-            </th>
-            <th class="py-2.5 pr-4 pl-3 text-right">
-              <button type="button" @click="handleSort('cost')" class="inline-flex items-center gap-1 hover:text-foreground cursor-pointer font-medium">
-                Cost / latency
+              <button
+                type="button"
+                @click="handleSort('latency')"
+                class="inline-flex items-center gap-1 hover:text-foreground cursor-pointer font-medium"
+                :title="latencyTooltip"
+              >
+                Latency
                 <ArrowUpDown class="size-3" />
               </button>
             </th>
@@ -289,7 +377,7 @@ const naEntries = (model: ModelResult): Array<{ key: string; label: string; reas
           <template v-for="(m, index) in sortedModels" :key="m.id">
             <tr
               class="hover:bg-accent/40 transition-colors group"
-              :class="hasMetrics(m) ? 'cursor-pointer' : ''"
+              :class="hasDetails(m) ? 'cursor-pointer' : ''"
               @click="toggleRow(m)"
             >
               <!-- Rank -->
@@ -297,15 +385,15 @@ const naEntries = (model: ModelResult): Array<{ key: string; label: string; reas
                 {{ index + 1 }}
               </td>
 
-              <!-- Model -->
+              <!-- Model / Entrant -->
               <td class="py-3 px-3">
                 <div class="flex items-center gap-2">
                   <button
-                    v-if="hasMetrics(m)"
+                    v-if="hasDetails(m)"
                     type="button"
                     class="p-0.5 text-muted-foreground hover:text-foreground cursor-pointer shrink-0"
                     :aria-expanded="expandedId === m.id"
-                    :aria-label="`Toggle metric detail for ${m.name}`"
+                    :aria-label="`Toggle composite detail for ${m.name}`"
                     @click.stop="toggleRow(m)"
                   >
                     <ChevronDown
@@ -318,95 +406,195 @@ const naEntries = (model: ModelResult): Array<{ key: string; label: string; reas
                   <span
                     v-if="m.isBest"
                     class="shrink-0 border border-border bg-muted/40 px-1 py-0.5 text-[9px] font-mono uppercase tracking-wider text-foreground"
-                    title="Highest score on this board"
+                    title="Highest composite score on this board"
                   >
                     Best
                   </span>
-                  <span class="text-[10px] font-mono text-muted-foreground shrink-0 uppercase tracking-wider">
-                    [{{ m.mode }}]
+                  <span
+                    class="text-[10px] font-mono text-muted-foreground shrink-0 tracking-wider"
+                    :title="modeTitle(m.mode)"
+                  >
+                    [{{ modeLabel(m.mode) }}]
                   </span>
                 </div>
 
                 <!-- Mobile 子行 -->
                 <div class="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-mono text-muted-foreground md:hidden">
-                  <span>Topo: <strong class="text-foreground">{{ fmtPct(m.topologyF1) }}</strong></span>
+                  <span>Score: <strong class="text-foreground">{{ fmtPct(primaryScore(m)) }}</strong></span>
                   <span>·</span>
-                  <span>Afford: <strong class="text-foreground">{{ fmtPct(m.affordanceAcc) }}</strong></span>
-                  <span>·</span>
-                  <span>{{ fmtCost(m.cost) }}</span>
+                  <span :title="latencyTooltip">{{ fmtLatency(m.latency) }}</span>
                 </div>
               </td>
 
-              <!-- Event macro-F1 -->
+              <!-- 综合分（主分） -->
               <td class="py-3 px-3">
                 <div class="flex items-center gap-3">
                   <div class="w-24 shrink-0 font-mono tabular-nums">
-                    <span class="font-semibold text-foreground text-[13px]">{{ fmtPct(m.score) }}</span>
+                    <span class="font-semibold text-foreground text-[15px]">
+                      {{ fmtPct(primaryScore(m)) }}
+                    </span>
+                    <span class="block text-[10px] text-muted-foreground">
+                      {{ m.composite ? '7 维等权' : '旧版事件分' }}
+                    </span>
                   </div>
 
-                  <div v-if="m.score != null" class="relative flex-1 h-4 bg-muted/30">
+                  <div v-if="primaryScore(m) != null" class="relative flex-1 h-4 bg-muted/30">
                     <div
                       class="h-full transition-all duration-300"
                       :style="{
-                        width: `${Math.min(100, Math.max(0, m.score))}%`,
+                        width: compositeBarWidth(primaryScore(m)),
                         backgroundColor: m.providerColor,
                         opacity: 0.85,
                       }"
                     />
                   </div>
                   <span v-else class="text-[11px] font-mono text-muted-foreground">
-                    {{ m.na.score ?? '未测' }}
+                    {{ m.na.compositeScore ?? m.na.score ?? '未测' }}
                   </span>
                 </div>
               </td>
 
-              <!-- Topology F1 -->
+              <!-- Latency（唯一保留的运行时指标） -->
               <td class="py-3 px-3 hidden md:table-cell text-right font-mono tabular-nums text-foreground">
-                {{ fmtPct(m.topologyF1) }}
-              </td>
-
-              <!-- Affordance -->
-              <td class="py-3 px-3 hidden lg:table-cell text-right font-mono tabular-nums text-foreground">
-                {{ fmtPct(m.affordanceAcc) }}
-              </td>
-
-              <!-- State dynamics -->
-              <td class="py-3 px-3 hidden lg:table-cell text-right font-mono tabular-nums text-foreground">
-                {{ fmtPct(m.stateTransitionAcc) }}
-              </td>
-
-              <!-- Cost / latency -->
-              <td class="py-3 pr-4 pl-3 text-right font-mono tabular-nums text-muted-foreground">
-                <div class="text-foreground">{{ fmtCost(m.cost) }}</div>
-                <div class="text-[10px] text-muted-foreground">{{ fmtTokens(m) }} · {{ fmtLatency(m.latency) }}</div>
+                <span :title="latencyTooltip">{{ fmtLatency(m.latency) }}</span>
               </td>
             </tr>
 
-            <!-- 明细展开（真实 head/pair/event/state 指标；null -> N/A） -->
-            <tr v-if="expandedId === m.id && hasMetrics(m)">
-              <td colspan="7" class="bg-muted/20 border-t border-border/40 px-4 py-4">
-                <div class="grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
-                  <div v-for="group in metricGroups(m)" :key="group.key">
+            <!-- 展开：7 维综合分构成（人话说明）+ 旧口径明细 -->
+            <tr v-if="expandedId === m.id && hasDetails(m)">
+              <td colspan="4" class="bg-muted/20 border-t border-border/40 px-4 py-4">
+                <div class="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+                  <!-- 综合分构成 -->
+                  <div>
                     <div class="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-                      {{ group.title }}
+                      Composite score breakdown
                     </div>
-                    <dl class="mt-2 space-y-1">
-                      <div
-                        v-for="entry in group.entries"
-                        :key="entry.key"
-                        class="flex items-baseline justify-between gap-3 text-[11px] font-mono"
-                      >
-                        <dt class="text-muted-foreground">{{ entry.label }}</dt>
-                        <dd class="text-foreground tabular-nums">{{ entry.value }}</dd>
+                    <p class="mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
+                      <span class="font-mono text-foreground">公式：</span>
+                      {{ COMPOSITE_FORMULA }}
+                      <span v-if="m.composite" class="font-mono">
+                        （{{ m.composite.available }}/{{ m.composite.total }} 维可用 · {{ m.composite.method }}）
+                      </span>
+                    </p>
+
+                    <p v-if="m.composite" class="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                      <span class="font-mono text-foreground">权重：</span>{{ weightsLabel(m) }}
+                    </p>
+                    <p v-if="m.composite" class="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                      综合分依赖权重：换一组权重，云端 4 个模型的名次会互换，但本地两行始终第一；详见
+                      reliability 报告。
+                    </p>
+                    <p v-if="meta.composite?.note" class="mt-1 text-[11px] leading-relaxed text-muted-foreground/80">
+                      {{ meta.composite.note }}
+                    </p>
+
+                    <ul v-if="m.composite" class="mt-4 space-y-3.5">
+                      <li v-for="dim in m.composite.dims" :key="dim.key" :title="dimTitle(dim)">
+                        <div class="flex items-baseline justify-between gap-3">
+                          <span class="text-[12px] font-medium text-foreground">
+                            {{ dim.group }}
+                          </span>
+                          <span
+                            class="font-mono text-[12px] tabular-nums"
+                            :class="dim.available ? 'text-foreground font-semibold' : 'text-muted-foreground'"
+                          >
+                            {{ dim.available ? fmtPct(dim.value) : NA }}
+                          </span>
+                        </div>
+                        <div class="mt-1 h-1.5 bg-muted/50">
+                          <div
+                            class="h-full"
+                            :style="{
+                              width: dim.available ? dimBarWidth(dim.value) : '0%',
+                              backgroundColor: m.providerColor,
+                              opacity: 0.85,
+                            }"
+                          />
+                        </div>
+                        <p class="mt-1 text-[11px] leading-snug text-muted-foreground">
+                          {{ COMPOSITE_DIM_GUIDE[dim.key].oneLiner }}
+                        </p>
+                        <p class="text-[11px] leading-snug text-muted-foreground/80">
+                          <span class="text-foreground/70">怎么看：</span>
+                          {{ COMPOSITE_DIM_GUIDE[dim.key].howToRead }}
+                        </p>
+                      </li>
+                    </ul>
+                    <p v-else class="mt-4 text-[11px] leading-relaxed text-muted-foreground">
+                      该版本数据未提供 7 维综合分构成（旧版 schema），主分回退为可比事件分。
+                    </p>
+                  </div>
+
+                  <!-- 旧口径明细 -->
+                  <div>
+                    <div class="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+                      Comparable metrics (legacy)
+                    </div>
+                    <dl class="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px] font-mono">
+                      <div class="flex items-baseline justify-between gap-2">
+                        <dt class="text-muted-foreground">Event macro-F1</dt>
+                        <dd class="text-foreground tabular-nums">{{ fmtPct(m.score) }}</dd>
+                      </div>
+                      <div class="flex items-baseline justify-between gap-2">
+                        <dt class="text-muted-foreground">Topology F1</dt>
+                        <dd class="text-foreground tabular-nums">{{ fmtPct(m.topologyF1) }}</dd>
+                      </div>
+                      <div class="flex items-baseline justify-between gap-2">
+                        <dt class="text-muted-foreground">Affordance</dt>
+                        <dd class="text-foreground tabular-nums">{{ fmtPct(m.affordanceAcc) }}</dd>
+                      </div>
+                      <div class="flex items-baseline justify-between gap-2">
+                        <dt class="text-muted-foreground">State dynamics</dt>
+                        <dd class="text-foreground tabular-nums">{{ fmtPct(m.stateTransitionAcc) }}</dd>
                       </div>
                     </dl>
+
+                    <button
+                      v-if="hasMetrics(m)"
+                      type="button"
+                      class="mt-3 inline-flex h-7 items-center gap-1 border border-border bg-background px-2.5 text-[11px] font-mono text-foreground transition-colors hover:bg-accent cursor-pointer"
+                      :aria-expanded="detailId === m.id"
+                      @click.stop="toggleDetail(m)"
+                    >
+                      <ChevronDown
+                        class="size-3 transition-transform"
+                        :class="detailId === m.id ? 'rotate-0' : '-rotate-90'"
+                      />
+                      {{ detailId === m.id ? '收起 head/pair/event 明细' : '展开 head/pair/event 明细' }}
+                    </button>
+
+                    <div v-if="detailId === m.id && hasMetrics(m)" class="mt-3 space-y-4">
+                      <div
+                        v-for="group in metricGroups(m)"
+                        :key="group.key"
+                        class="border-t border-border/40 pt-2"
+                      >
+                        <div class="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                          {{ group.title }}
+                        </div>
+                        <dl class="mt-1.5 space-y-1">
+                          <div
+                            v-for="entry in group.entries"
+                            :key="entry.key"
+                            class="flex items-baseline justify-between gap-3 text-[11px] font-mono"
+                          >
+                            <dt class="text-muted-foreground">{{ entry.label }}</dt>
+                            <dd class="text-foreground tabular-nums">{{ entry.value }}</dd>
+                          </div>
+                        </dl>
+                      </div>
+
+                      <div
+                        v-if="naEntries(m).length > 0"
+                        class="border-t border-border/40 pt-2 text-[11px] font-mono text-muted-foreground"
+                      >
+                        <span class="text-foreground">N/A:</span>
+                        <span v-for="(entry, i) in naEntries(m)" :key="entry.key">
+                          {{ i > 0 ? ' · ' : ' ' }}<span class="text-foreground">{{ entry.label }}</span> — {{ entry.reason }}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <div v-if="naEntries(m).length > 0" class="mt-4 pt-3 border-t border-border/40 text-[11px] font-mono text-muted-foreground">
-                  <span class="text-foreground">N/A:</span>
-                  <span v-for="(entry, i) in naEntries(m)" :key="entry.key">
-                    {{ i > 0 ? ' · ' : ' ' }}<span class="text-foreground">{{ entry.label }}</span> — {{ entry.reason }}
-                  </span>
                 </div>
               </td>
             </tr>
@@ -420,10 +608,16 @@ const naEntries = (model: ModelResult): Array<{ key: string; label: string; reas
     </div>
 
     <p class="text-[12px] leading-relaxed text-muted-foreground">
-      Score = 100 × event-level macro-F1; Topology F1 = relation-type accuracy on matched pairs;
-      Affordance = attribute accuracy; State dynamics = change top-1 on the 60-pair protocol.
-      Click a row to expand its measured detail. N/A means the dimension was not measurable in this
-      run — it is never filled with a placeholder. Latency is measured per call/run.
+      综合分 = {{ COMPOSITE_FORMULA }}。7 个维度：变化识别 top-1、变化平衡性 macro-F1、
+      关系类别、空间方位、接触/支撑、事件级 F1、世界状态一致性。点开任意一行可看 7 维分数与每维的人话解释；
+      旧的可比事件分与 head / pair / event / state 明细仍保留在展开区，未删除。延迟为每事件端到端
+      （含特征抽取 / API 往返），云端受网络与输出长度影响。N/A 表示该维度没有真实测量值，不会用 0 或占位符代替。
+    </p>
+    <p v-if="topTwo" class="text-[12px] leading-relaxed text-muted-foreground">
+      前两名 {{ topTwo.first.name }} / {{ topTwo.second.name }} 的综合分为
+      {{ fmtPct(primaryScore(topTwo.first)) }} : {{ fmtPct(primaryScore(topTwo.second)) }}，
+      差 {{ topTwo.gap.toFixed(1) }} 分，约等于打平。综合分依赖权重——换一组权重，云端 4 个模型的名次会
+      互换，但本地两行始终第一；详见 reliability 报告。
     </p>
   </div>
 </template>
