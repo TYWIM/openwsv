@@ -4,19 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
-    <title>OpenWSV - BenchMark | World State & Spatial Topology Evaluation</title>
-    <meta name="description" content="Evaluating frontier multimodal foundation models on world state verification, 3D spatial topology, and spatiotemporal physical causality." />
-    
+    <title>StarLife-1-WSV · Observation Model Evaluation</title>
+    <meta
+      name="description"
+      content="Evaluation leaderboard for the StarLife-1-WSV observation model: five judgement heads over synthetic 3D tabletop scenes, head-level and event-level metrics, world-state replay, and a 60-pair head-to-head against cloud VLMs."
+    />
+
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-    <!-- FOUC prevention & Theme synchronization -->
+    <!-- FOUC prevention & theme synchronization -->
     <script>
       (function() {
         try {
-          const stored = localStorage.getItem("openwsv_theme");
+          const stored = localStorage.getItem("starlife_theme");
           const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
           const theme = stored ? stored : (prefersDark ? "dark" : "light");
           if (theme === "dark") {

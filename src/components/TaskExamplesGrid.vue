@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { TASK_EXAMPLES, TaskExample } from '../data/benchmarkData';
+import { TASK_EXAMPLES, type TaskExample } from '../data/benchmarkData';
 import TaskModal from './TaskModal.vue';
 import { ArrowUpRight } from 'lucide-vue-next';
 
@@ -11,10 +11,10 @@ const activeTask = ref<TaskExample | null>(null);
   <section id="tasks" class="mt-16 sm:mt-24 scroll-mt-20">
     <div class="flex items-baseline justify-between mb-5">
       <h2 class="text-xl sm:text-2xl font-medium tracking-tight text-foreground">
-        Task Examples
+        Judgement Tasks
       </h2>
       <span class="text-xs font-mono text-muted-foreground">
-        Showing 6 / 142 evaluation scenarios
+        Showing {{ TASK_EXAMPLES.length }} / {{ TASK_EXAMPLES.length }} head outputs
       </span>
     </div>
 

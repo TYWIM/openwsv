@@ -1,270 +1,281 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { ModelResult } from '../data/benchmarkData';
+import {
+  NA,
+  METRIC_LABELS,
+  METRIC_UNAVAILABLE_REASONS,
+  firstAvailableMetric,
+  fmtCost,
+  fmtLatency,
+  fmtPct,
+  fmtTokens,
+  hasMetricData,
+  metricValue,
+  type LeaderboardMeta,
+  type MetricKey,
+  type ModelResult,
+} from '../data/benchmarkData';
 import { ChevronDown } from 'lucide-vue-next';
 
 const props = defineProps<{
   models: ModelResult[];
   allModelsCount: number;
-  activeMetric: 'cost' | 'tokens' | 'latency';
-  activeVersion: 'v1.1' | 'v1.0';
+  activeMetric: MetricKey | null;
+  activeVersion: string;
+  versions: string[];
+  meta: LeaderboardMeta;
 }>();
 
 const emit = defineEmits<{
-  (e: 'update:activeMetric', metric: 'cost' | 'tokens' | 'latency'): void;
-  (e: 'update:activeVersion', version: 'v1.1' | 'v1.0'): void;
-  (e: 'filter-config'): void;
+  (e: 'update:activeMetric', metric: MetricKey): void;
+  (e: 'update:activeVersion', version: string): void;
 }>();
 
 const hoveredModel = ref<ModelResult | null>(null);
 const showConfigsDropdown = ref(false);
 
-// SVG Canvas Dimensions matching DeepSWE viewBox
+// SVG canvas（比例沿用上游 DeepSWE 风格布局）
 const svgWidth = 900;
 const svgHeight = 563;
-
-// Safe Chart Bounds with generous margins so data/labels NEVER exceed boundaries
 const leftX = 75;
-const rightX = 770;  // 130px padding on the right to prevent any text overflow
-const topY = 52;     // corresponds to 90% (generous headroom for 84.8% StarLife)
-const bottomY = 510; // corresponds to 0%
+const rightX = 770;
+const topY = 52;
+const bottomY = 510;
 
-// Max score on Y-axis is 90% so 84.8% sits cleanly below top edge with ~50px headroom
-const maxScore = 90;
+const METRIC_ORDER: MetricKey[] = ['latency', 'cost', 'tokens'];
+
+const metricAvailable = computed<Record<MetricKey, boolean>>(() => ({
+  latency: hasMetricData(props.models, 'latency'),
+  cost: hasMetricData(props.models, 'cost'),
+  tokens: hasMetricData(props.models, 'tokens'),
+}));
+
+/**
+ * 当前维度：父组件选的维度若不可用（该维度全为 null），自动回退到第一个可用维度；
+ * 都不可用则为 null -> 图表区显示空态。
+ */
+const metric = computed<MetricKey | null>(() => {
+  if (props.activeMetric && metricAvailable.value[props.activeMetric]) {
+    return props.activeMetric;
+  }
+  return firstAvailableMetric(props.models);
+});
+
+/** Y 轴：按真实 score 自适应 nice max（上限 100%）；无 score 时给默认刻度。 */
+const scoreDomain = computed(() => {
+  const scores = props.models
+    .map((m) => m.score)
+    .filter((v): v is number => v != null && Number.isFinite(v));
+  if (scores.length === 0) return { max: 100, ticks: [0, 20, 40, 60, 80, 100] };
+  const dataMax = Math.max(...scores);
+  const padded = Math.min(100, Math.max(5, dataMax * 1.06 + 0.5));
+  for (const step of [5, 10, 20, 25, 50]) {
+    const max = Math.ceil(padded / step) * step;
+    if (max <= 100 && max / step <= 8) {
+      const ticks: number[] = [];
+      for (let value = 0; value <= max + 1e-9; value += step) ticks.push(value);
+      return { max, ticks };
+    }
+  }
+  return { max: 100, ticks: [0, 20, 40, 60, 80, 100] };
+});
 
 const scaleY = (score: number) => {
-  const clamped = Math.max(0, Math.min(maxScore, score));
-  return bottomY - (clamped / maxScore) * (bottomY - topY);
+  const clamped = Math.max(0, Math.min(scoreDomain.value.max, score));
+  return bottomY - (clamped / scoreDomain.value.max) * (bottomY - topY);
 };
 
-// Y Ticks: 0% to 90% every 10%
-const yTicks = [
-  { val: 0, y: bottomY },
-  { val: 10, y: scaleY(10) },
-  { val: 20, y: scaleY(20) },
-  { val: 30, y: scaleY(30) },
-  { val: 40, y: scaleY(40) },
-  { val: 50, y: scaleY(50) },
-  { val: 60, y: scaleY(60) },
-  { val: 70, y: scaleY(70) },
-  { val: 80, y: scaleY(80) },
-  { val: 90, y: topY },
-];
+/** X 轴：按真实数据自适应 nice max，0 在右、大值在左（反向轴）。 */
+const niceMax = (dataMax: number): number => {
+  if (!(dataMax > 0)) return 1;
+  const exponent = Math.floor(Math.log10(dataMax));
+  const base = Math.pow(10, exponent);
+  const normalized = dataMax / base;
+  const nice =
+    normalized <= 1
+      ? 1
+      : normalized <= 1.5
+        ? 1.5
+        : normalized <= 2
+          ? 2
+          : normalized <= 2.5
+            ? 2.5
+            : normalized <= 3
+              ? 3
+              : normalized <= 4
+                ? 4
+                : normalized <= 5
+                  ? 5
+                  : normalized <= 6
+                    ? 6
+                    : normalized <= 8
+                      ? 8
+                      : 10;
+  return nice * base;
+};
 
-// X Axis Config (REVERSED: 0 is on the right, higher cost/tokens/latency on the left)
-// Calibrated to real model distribution so points are well-spaced across the entire canvas
-const xConfig = computed(() => {
-  if (props.activeMetric === 'tokens') {
-    const maxTokens = 60; // 60k
+const fmtTokenValue = (value: number): string => {
+  if (value >= 1000) {
+    const k = value / 1000;
+    return `${k >= 10 ? k.toFixed(0) : k.toFixed(1)}k`;
+  }
+  return String(Math.round(value));
+};
+
+const xAxis = computed(() => {
+  const current = metric.value;
+  if (!current) return null;
+  const values = props.models
+    .map((m) => metricValue(m, current))
+    .filter((v): v is number => v != null && Number.isFinite(v));
+  const dataMax = values.length > 0 ? Math.max(...values) : 0;
+  const max = niceMax(dataMax);
+  const format =
+    current === 'cost'
+      ? (v: number) => `$${v.toFixed(2)}`
+      : current === 'tokens'
+        ? fmtTokenValue
+        : (v: number) => `${Math.round(v)}ms`;
+  const label =
+    current === 'cost'
+      ? 'Avg cost per task'
+      : current === 'tokens'
+        ? 'Avg tokens per task'
+        : 'Avg latency per task';
+  // 所有实测值都是 0（例如本地自有硬件 cost=0）：只保留 0 刻度，不虚构 $1 的轴范围。
+  if (dataMax === 0) {
     return {
-      label: 'Avg visual tokens per task',
-      scale: (tokens: number) => {
-        const clamped = Math.max(0, Math.min(maxTokens, tokens));
-        return rightX - (clamped / maxTokens) * (rightX - leftX);
-      },
-      ticks: [
-        { label: '0k', x: rightX },
-        { label: '20k', x: rightX - (20 / maxTokens) * (rightX - leftX) },
-        { label: '40k', x: rightX - (40 / maxTokens) * (rightX - leftX) },
-        { label: '60k', x: leftX },
-      ],
-      getValue: (m: ModelResult) => m.tokenNum,
-    };
-  } else if (props.activeMetric === 'latency') {
-    const maxLat = 1800; // 1800ms
-    return {
-      label: 'Avg latency per task',
-      scale: (lat: number) => {
-        const clamped = Math.max(0, Math.min(maxLat, lat));
-        return rightX - (clamped / maxLat) * (rightX - leftX);
-      },
-      ticks: [
-        { label: '0ms', x: rightX },
-        { label: '600ms', x: rightX - (600 / maxLat) * (rightX - leftX) },
-        { label: '1200ms', x: rightX - (1200 / maxLat) * (rightX - leftX) },
-        { label: '1800ms', x: leftX },
-      ],
-      getValue: (m: ModelResult) => m.latency,
+      max,
+      label,
+      format,
+      position: () => rightX,
+      ticks: [{ value: 0, label: format(0), x: rightX }],
     };
   }
-
-  // Default: Cost ($0 to $6.00)
-  const maxCost = 6.0;
-  return {
-    label: 'Avg cost per task',
-    scale: (cost: number) => {
-      const clamped = Math.max(0, Math.min(maxCost, cost));
-      return rightX - (clamped / maxCost) * (rightX - leftX);
-    },
-    ticks: [
-      { label: '$0', x: rightX },
-      { label: '$2.00', x: rightX - (2.0 / maxCost) * (rightX - leftX) },
-      { label: '$4.00', x: rightX - (4.0 / maxCost) * (rightX - leftX) },
-      { label: '$6.00', x: leftX },
-    ],
-    getValue: (m: ModelResult) => m.cost,
-  };
+  const position = (v: number) => rightX - (Math.max(0, Math.min(max, v)) / max) * (rightX - leftX);
+  // 4 等分刻度，大数（如 50000ms）也能落在整数上，0 在右。
+  const ticks = Array.from({ length: 5 }, (_, i) => {
+    const value = (max * i) / 4;
+    return { value, label: format(value), x: position(value) };
+  });
+  return { max, label, format, position, ticks };
 });
 
-// Group models by family to draw connected curves
+/** 跳过 score 或当前 X 维度为 null 的模型（缺测 -> 不画点）。 */
+const plotted = computed(() => {
+  const current = metric.value;
+  const axis = xAxis.value;
+  if (!current || !axis) return [];
+  const points: Array<{ model: ModelResult; x: number; y: number }> = [];
+  for (const model of props.models) {
+    if (model.score == null || !Number.isFinite(model.score)) continue;
+    const value = metricValue(model, current);
+    if (value == null || !Number.isFinite(value)) continue;
+    points.push({ model, x: axis.position(value), y: scaleY(model.score) });
+  }
+  return points;
+});
+
 const modelFamilies = computed(() => {
-  const families: Record<string, { color: string; models: ModelResult[] }> = {};
-
-  props.models.forEach((m) => {
-    if (!families[m.family]) {
-      families[m.family] = { color: m.providerColor, models: [] };
+  const families: Record<string, { color: string; points: Array<{ x: number; y: number }> }> = {};
+  for (const point of plotted.value) {
+    const family = point.model.family;
+    if (!families[family]) {
+      families[family] = { color: point.model.providerColor, points: [] };
     }
-    families[m.family].models.push(m);
-  });
-
-  return Object.entries(families).map(([famName, data]) => {
-    // Sort from highest cost/token (left) to lowest (right)
-    const sorted = [...data.models].sort((a, b) => {
-      return xConfig.value.getValue(b) - xConfig.value.getValue(a);
-    });
-
-    // Generate SVG path connecting points
-    let pathD = '';
-    sorted.forEach((m, idx) => {
-      const cx = xConfig.value.scale(xConfig.value.getValue(m));
-      const cy = scaleY(m.score);
-      if (idx === 0) {
-        pathD += `M ${cx.toFixed(1)} ${cy.toFixed(1)}`;
-      } else {
-        pathD += ` L ${cx.toFixed(1)} ${cy.toFixed(1)}`;
-      }
-    });
-
-    return {
-      name: famName,
-      color: data.color,
-      models: sorted,
-      pathD,
-    };
+    families[family].points.push({ x: point.x, y: point.y });
+  }
+  return Object.entries(families).map(([name, data]) => {
+    const sorted = [...data.points].sort((a, b) => b.x - a.x);
+    const pathD = sorted.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+    return { name, color: data.color, points: sorted, pathD };
   });
 });
 
-// Smart label position calculator ensuring no label ever crosses chart edges or overlaps
-const getLabelLayout = (m: ModelResult) => {
-  const cx = xConfig.value.scale(xConfig.value.getValue(m));
-  const cy = scaleY(m.score);
-
-  let anchor = 'middle';
-  let tx = cx;
-  let ty = cy - 10;
-  let subTy = cy - 1;
-
-  // If point is close to the right edge (cx > 720), align text to the left/end so it never cuts off
-  if (cx > 710) {
+const labelFor = (point: { x: number; y: number }) => {
+  let anchor: 'middle' | 'start' | 'end' = 'middle';
+  let tx = point.x;
+  let ty = point.y - 10;
+  if (point.x > 710) {
     anchor = 'end';
-    tx = cx - 8;
-    ty = cy - 3;
-    subTy = cy + 8;
-  }
-  // If point is close to the left edge (cx < 120), align text to the right/start
-  else if (cx < 120) {
+    tx = point.x - 8;
+  } else if (point.x < 120) {
     anchor = 'start';
-    tx = cx + 8;
-    ty = cy - 3;
-    subTy = cy + 8;
+    tx = point.x + 8;
   }
-  // Special stagger for closely-clustered points to prevent text collision
-  if (m.id === 'starlife-1-wsv-lite') {
-    anchor = 'end';
-    tx = cx - 8;
-    ty = cy + 12;
-    subTy = cy + 22;
-  } else if (m.id === 'gemini-2-flash') {
-    anchor = 'end';
-    tx = cx - 8;
-    ty = cy - 3;
-    subTy = cy + 7;
-  } else if (m.id === 'gpt-4o-2024-11') {
-    anchor = 'start';
-    tx = cx + 8;
-    ty = cy - 2;
-    subTy = cy + 8;
-  }
-
-  return { cx, cy, tx, ty, subTy, anchor };
+  // 贴近顶部时把标签放到点下方，避免溢出画布
+  if (ty < topY + 14) ty = point.y + 18;
+  return { tx, ty, subTy: ty + 10, anchor };
 };
 
-// Filter which models get permanent labels (flagship/prominent) to match DeepSWE clean density
-const shouldShowLabel = (m: ModelResult) => {
-  // Always show StarLife models, best-in-class models, or when hovered
-  if (m.family === 'StarLife' || m.isBest) return true;
-  if (hoveredModel.value?.id === m.id) return true;
-  // Specific milestone models
-  if (['gpt-4o-2024-11', 'gemini-2-flash', 'claude-3-opus', 'gpt-4-turbo'].includes(m.id)) return true;
-  return false;
-};
+const metaLabel = computed(() => {
+  const parts: string[] = [];
+  if (props.meta.nPairs != null) parts.push(`${props.meta.nPairs} pairs`);
+  if (props.meta.split) parts.push(props.meta.split);
+  if (props.meta.dataset) parts.push(props.meta.dataset);
+  return parts.length > 0 ? parts.join(' · ') : '尚无评测结果';
+});
 </script>
 
 <template>
   <div class="mb-10">
-    <!-- Top Controls Row (Directly above the chart, matching DeepSWE) -->
+    <!-- 顶部控制行 -->
     <div class="mb-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-      <!-- Left Controls: Version and Metric toggles -->
       <div class="flex items-center gap-2.5">
-        <!-- Version Segmented Control -->
-        <div class="inline-flex h-7 items-center border border-border text-xs">
+        <!-- 版本切换：只有数据里真的存在多个版本时才显示 -->
+        <div
+          v-if="versions.length > 1"
+          class="inline-flex h-7 items-center border border-border text-xs"
+        >
           <button
+            v-for="(version, index) in versions"
+            :key="version"
             type="button"
-            @click="emit('update:activeVersion', 'v1.1')"
-            :aria-pressed="activeVersion === 'v1.1'"
-            class="inline-flex h-full items-center justify-center px-2.5 outline-none transition-colors cursor-pointer"
-            :class="activeVersion === 'v1.1' ? 'bg-foreground text-background font-medium' : 'text-muted-foreground hover:bg-accent hover:text-foreground'"
+            @click="emit('update:activeVersion', version)"
+            :aria-pressed="activeVersion === version"
+            :class="[
+              'inline-flex h-full items-center justify-center px-2.5 outline-none transition-colors cursor-pointer',
+              index > 0 ? 'border-l border-border' : '',
+              activeVersion === version
+                ? 'bg-foreground text-background font-medium'
+                : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+            ]"
           >
-            v1.1
-          </button>
-          <button
-            type="button"
-            @click="emit('update:activeVersion', 'v1.0')"
-            :aria-pressed="activeVersion === 'v1.0'"
-            class="inline-flex h-full items-center justify-center px-2.5 outline-none transition-colors border-l border-border cursor-pointer"
-            :class="activeVersion === 'v1.0' ? 'bg-foreground text-background font-medium' : 'text-muted-foreground hover:bg-accent hover:text-foreground'"
-          >
-            v1
+            {{ version }}
           </button>
         </div>
 
-        <!-- Metric Segmented Control -->
+        <!-- 维度切换：某维度全为 null 时禁用 -->
         <div class="inline-flex h-7 items-center border border-border text-xs">
           <button
+            v-for="(key, index) in METRIC_ORDER"
+            :key="key"
             type="button"
-            @click="emit('update:activeMetric', 'cost')"
-            :aria-pressed="activeMetric === 'cost'"
-            class="inline-flex h-full items-center justify-center px-2.5 outline-none transition-colors cursor-pointer"
-            :class="activeMetric === 'cost' ? 'bg-foreground text-background font-medium' : 'text-muted-foreground hover:bg-accent hover:text-foreground'"
+            :disabled="!metricAvailable[key]"
+            :aria-pressed="metric === key"
+            :title="metricAvailable[key] ? `Plot against ${METRIC_LABELS[key].toLowerCase()}` : METRIC_UNAVAILABLE_REASONS[key]"
+            @click="metricAvailable[key] && emit('update:activeMetric', key)"
+            :class="[
+              'inline-flex h-full items-center justify-center px-2.5 outline-none transition-colors',
+              index > 0 ? 'border-l border-border' : '',
+              !metricAvailable[key]
+                ? 'text-muted-foreground/40 cursor-not-allowed'
+                : metric === key
+                  ? 'bg-foreground text-background font-medium cursor-pointer'
+                  : 'text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer',
+            ]"
           >
-            Cost
-          </button>
-          <button
-            type="button"
-            @click="emit('update:activeMetric', 'tokens')"
-            :aria-pressed="activeMetric === 'tokens'"
-            class="inline-flex h-full items-center justify-center px-2.5 outline-none transition-colors border-l border-border cursor-pointer"
-            :class="activeMetric === 'tokens' ? 'bg-foreground text-background font-medium' : 'text-muted-foreground hover:bg-accent hover:text-foreground'"
-          >
-            Output tokens
-          </button>
-          <button
-            type="button"
-            @click="emit('update:activeMetric', 'latency')"
-            :aria-pressed="activeMetric === 'latency'"
-            class="inline-flex h-full items-center justify-center px-2.5 outline-none transition-colors border-l border-border cursor-pointer"
-            :class="activeMetric === 'latency' ? 'bg-foreground text-background font-medium' : 'text-muted-foreground hover:bg-accent hover:text-foreground'"
-          >
-            Agent steps / Latency
+            {{ METRIC_LABELS[key] }}
           </button>
         </div>
       </div>
 
-      <!-- Right Metadata & Configs button -->
       <div class="ml-auto flex items-center gap-3">
         <span class="text-[12px] text-muted-foreground tabular-nums">
-          <span class="text-foreground">142 tasks</span>
-          <span> · updated <span class="text-foreground">October 20, 2026</span></span>
+          <span class="text-foreground">{{ metaLabel }}</span>
+          <template v-if="meta.generatedAt">
+            <span> · generated <span class="text-foreground">{{ meta.generatedAt.slice(0, 10) }}</span></span>
+          </template>
           <span> · </span>
           <a href="#methodology" class="underline underline-offset-4 decoration-foreground/30 hover:decoration-foreground hover:text-foreground transition-colors">
             methodology
@@ -278,26 +289,39 @@ const shouldShowLabel = (m: ModelResult) => {
             class="inline-flex items-center justify-center whitespace-nowrap font-medium transition-all border border-border bg-background hover:bg-accent hover:text-foreground h-7 gap-1.5 px-2.5 text-xs cursor-pointer"
           >
             <span>Configs</span>
-            <span class="tabular-nums text-muted-foreground">({{ models.length }}/{{ allModelsCount }})</span>
+            <span class="tabular-nums text-muted-foreground">({{ plotted.length }}/{{ allModelsCount }})</span>
             <ChevronDown class="size-3.5 transition-transform" />
           </button>
 
           <div
             v-if="showConfigsDropdown"
-            class="absolute right-0 top-8 z-30 w-52 border border-border bg-popover p-3 shadow-md text-xs font-mono"
+            class="absolute right-0 top-8 z-30 w-56 border border-border bg-popover p-3 shadow-md text-xs font-mono"
           >
             <div class="font-semibold text-foreground mb-2">Display Configurations</div>
             <div class="space-y-1.5 text-muted-foreground">
               <div class="flex items-center justify-between">
-                <span>Active Models:</span>
-                <span class="text-foreground font-semibold">{{ models.length }}</span>
+                <span>Plotted points:</span>
+                <span class="text-foreground font-semibold">{{ plotted.length }}</span>
               </div>
               <div class="flex items-center justify-between">
-                <span>Benchmark Version:</span>
-                <span class="text-foreground uppercase">{{ activeVersion }}</span>
+                <span>X metric:</span>
+                <span class="text-foreground uppercase">{{ metric ?? 'none' }}</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span>Sample seed:</span>
+                <span class="text-foreground">{{ meta.sampleSeed ?? NA }}</span>
+              </div>
+              <div v-if="!metricAvailable.cost" class="flex items-center justify-between">
+                <span>Cost:</span>
+                <span class="text-foreground">disabled</span>
+              </div>
+              <div v-if="!metricAvailable.tokens" class="flex items-center justify-between">
+                <span>Tokens:</span>
+                <span class="text-foreground">disabled</span>
               </div>
               <div class="pt-2 border-t border-border/50 text-[11px]">
-                Filter by individual model in the table below.
+                Models with a null score or a null value on the selected X metric are not plotted.
+                Switch to a dimension with measured values to see them.
               </div>
             </div>
           </div>
@@ -305,180 +329,135 @@ const shouldShowLabel = (m: ModelResult) => {
       </div>
     </div>
 
-    <!-- Chart Frame (Matching DeepSWE: border border-border bg-card p-2 sm:p-3) -->
+    <!-- 图表 -->
     <div class="border border-border bg-card p-2 sm:p-3 relative overflow-hidden">
       <div class="w-full">
         <svg
           :viewBox="`0 0 ${svgWidth} ${svgHeight}`"
           width="100%"
           role="img"
-          :aria-label="`Pass rate vs ${xConfig.label}`"
+          :aria-label="`Event-level macro-F1 versus ${xAxis?.label ?? 'throughput metric'}`"
           style="display: block;"
           class="select-none"
         >
-          <!-- Y-Axis Title (OpenWSV score) -->
-          <text
-            :x="leftX"
-            y="26"
-            text-anchor="start"
-            font-size="14"
-            font-weight="600"
-            class="fill-foreground font-sans"
-          >
-            OpenWSV score
+          <text :x="leftX" y="26" text-anchor="start" font-size="14" font-weight="600" class="fill-foreground font-sans">
+            Event-level macro-F1 (%)
           </text>
 
-          <!-- Top-right 'most efficient ↗' indicator -->
-          <text
-            :x="rightX"
-            y="30"
-            text-anchor="end"
-            font-size="11"
-            font-style="italic"
-            class="fill-muted-foreground"
-          >
+          <text v-if="xAxis" :x="rightX" y="30" text-anchor="end" font-size="11" font-style="italic" class="fill-muted-foreground">
             most efficient ↗
           </text>
 
-          <!-- Vertical Grid Lines & Ticks (Reversed X-axis) -->
-          <g v-for="tick in xConfig.ticks" :key="tick.label">
-            <line
-              :x1="tick.x"
-              :x2="tick.x"
-              :y1="topY"
-              :y2="bottomY"
-              stroke="var(--muted-foreground)"
-              opacity="0.25"
-            />
-            <text
-              :x="tick.x"
-              y="529"
-              text-anchor="middle"
-              font-size="12"
-              class="fill-muted-foreground font-mono"
-            >
-              {{ tick.label }}
-            </text>
+          <!-- X 轴网格 -->
+          <g v-if="xAxis">
+            <g v-for="tick in xAxis.ticks" :key="`x-${tick.label}-${tick.x}`">
+              <line :x1="tick.x" :x2="tick.x" :y1="topY" :y2="bottomY" stroke="var(--muted-foreground)" opacity="0.25" />
+              <text :x="tick.x" y="529" text-anchor="middle" font-size="12" class="fill-muted-foreground font-mono">
+                {{ tick.label }}
+              </text>
+            </g>
           </g>
 
-          <!-- Horizontal Grid Lines & Ticks (Y-axis 0% to 90%) -->
-          <g v-for="tick in yTicks" :key="tick.val">
-            <line
-              :x1="leftX"
-              :x2="rightX"
-              :y1="tick.y"
-              :y2="tick.y"
-              stroke="var(--muted-foreground)"
-              opacity="0.25"
-            />
+          <!-- Y 轴网格（按数据自适应） -->
+          <g v-for="tick in scoreDomain.ticks" :key="`y-${tick}`">
+            <line :x1="leftX" :x2="rightX" :y1="scaleY(tick)" :y2="scaleY(tick)" stroke="var(--muted-foreground)" opacity="0.25" />
             <text
               :x="leftX - 10"
-              :y="tick.y + 4"
+              :y="scaleY(tick) + 4"
               text-anchor="end"
               font-size="12"
               class="fill-muted-foreground font-mono tabular-nums"
             >
-              {{ tick.val }}%
+              {{ tick }}%
             </text>
           </g>
 
-          <!-- Bottom X-Axis Label -->
+          <!-- X 轴标题 -->
           <text
+            v-if="xAxis"
             :x="(leftX + rightX) / 2"
             y="549"
             text-anchor="middle"
             font-size="13"
             class="fill-foreground font-sans font-medium"
           >
-            {{ xConfig.label }}
+            {{ xAxis.label }}
           </text>
 
-          <!-- Family Connecting Trade-off Curves -->
+          <!-- family 折线（同 family 内 >1 点才连） -->
           <g v-for="fam in modelFamilies" :key="`curve-${fam.name}`">
-            <!-- Thicker transparent hover stroke for interaction -->
-            <path
-              v-if="fam.models.length > 1"
-              :d="fam.pathD"
-              fill="none"
-              stroke="transparent"
-              stroke-width="12"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              class="cursor-pointer"
-            />
-            <!-- Visible connecting curve -->
-            <path
-              v-if="fam.models.length > 1"
-              :d="fam.pathD"
-              fill="none"
-              :stroke="fam.color"
-              stroke-width="2.2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              opacity="0.75"
-              style="transition: opacity 150ms ease;"
-            />
+            <template v-if="fam.points.length > 1">
+              <path :d="fam.pathD" fill="none" stroke="transparent" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" class="cursor-pointer" />
+              <path
+                :d="fam.pathD"
+                fill="none"
+                :stroke="fam.color"
+                stroke-width="2.2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                opacity="0.75"
+                style="transition: opacity 150ms ease;"
+              />
+            </template>
           </g>
 
-          <!-- Model Points & Labels (DeepSWE style) -->
+          <!-- 数据点 + 标签 -->
           <g
-            v-for="m in models"
-            :key="m.id"
+            v-for="point in plotted"
+            :key="point.model.id"
             class="cursor-pointer"
-            @mouseenter="hoveredModel = m"
+            @mouseenter="hoveredModel = point.model"
             @mouseleave="hoveredModel = null"
           >
-            <!-- Large transparent hit target for easy mouse hover -->
+            <circle :cx="point.x" :cy="point.y" r="14" fill="transparent" />
             <circle
-              :cx="getLabelLayout(m).cx"
-              :cy="getLabelLayout(m).cy"
-              r="14"
-              fill="transparent"
-            />
-
-            <!-- Visible point circle -->
-            <circle
-              :cx="getLabelLayout(m).cx"
-              :cy="getLabelLayout(m).cy"
-              :r="hoveredModel?.id === m.id ? 5.5 : (m.isBest ? 4.5 : 3.5)"
-              :fill="m.providerColor"
+              :cx="point.x"
+              :cy="point.y"
+              :r="hoveredModel?.id === point.model.id ? 5.5 : point.model.isBest ? 4.5 : 3.5"
+              :fill="point.model.providerColor"
               stroke="var(--background)"
               stroke-width="1.5"
             />
-
-            <!-- Model Name Text (Smartly anchored, background stroke to prevent gridline interference) -->
             <text
-              v-if="shouldShowLabel(m)"
-              :x="getLabelLayout(m).tx"
-              :y="getLabelLayout(m).ty"
-              :text-anchor="getLabelLayout(m).anchor"
+              :x="labelFor(point).tx"
+              :y="labelFor(point).ty"
+              :text-anchor="labelFor(point).anchor"
               font-size="11.5"
               font-weight="600"
-              :fill="m.providerColor"
+              :fill="point.model.providerColor"
               style="paint-order: stroke; stroke: var(--background); stroke-width: 3.5px; stroke-linejoin: round;"
             >
-              {{ m.name }}
+              {{ point.model.name }}
             </text>
-
-            <!-- Effort / Mode Monospace Subtitle -->
             <text
-              v-if="shouldShowLabel(m)"
-              :x="getLabelLayout(m).tx"
-              :y="getLabelLayout(m).subTy"
-              :text-anchor="getLabelLayout(m).anchor"
+              :x="labelFor(point).tx"
+              :y="labelFor(point).subTy"
+              :text-anchor="labelFor(point).anchor"
               font-size="8.8"
               font-weight="400"
-              :fill="m.providerColor"
+              :fill="point.model.providerColor"
               opacity="0.7"
               style="font-family: var(--font-mono); letter-spacing: 0.08em; paint-order: stroke; stroke: var(--background); stroke-width: 2.8px; stroke-linejoin: round;"
             >
-              {{ m.mode }}
+              {{ point.model.mode }}
             </text>
           </g>
+
+          <!-- 空态 / 无可绘点 -->
+          <text
+            v-if="plotted.length === 0"
+            :x="(leftX + rightX) / 2"
+            :y="(topY + bottomY) / 2"
+            text-anchor="middle"
+            font-size="13"
+            class="fill-muted-foreground font-sans"
+          >
+            尚无可用数据点（该维度无实测值，或 leaderboard.generated.json 尚未生成）
+          </text>
         </svg>
       </div>
 
-      <!-- Floating Hover Tooltip -->
+      <!-- Hover tooltip：null 一律渲染 N/A -->
       <div
         v-if="hoveredModel"
         class="absolute top-4 right-4 border border-border bg-card p-3 shadow-lg pointer-events-none text-xs font-mono max-w-xs transition-opacity duration-150 z-20"
@@ -492,14 +471,24 @@ const shouldShowLabel = (m: ModelResult) => {
         </div>
         <div class="mt-1 text-muted-foreground">Provider: {{ hoveredModel.provider }}</div>
         <div class="mt-2 pt-2 border-t border-border/50 grid grid-cols-2 gap-x-4 gap-y-1">
-          <div>Pass@1: <span class="text-foreground font-semibold">{{ hoveredModel.score }}% ± {{ hoveredModel.confidence }}%</span></div>
-          <div>Topology F1: <span class="text-foreground">{{ hoveredModel.topologyF1 }}%</span></div>
-          <div>Cost: <span class="text-foreground">${{ hoveredModel.cost.toFixed(2) }}</span></div>
-          <div>Tokens: <span class="text-foreground">{{ hoveredModel.tokens }}</span></div>
-          <div>Latency: <span class="text-foreground">{{ hoveredModel.latency }}ms</span></div>
-          <div>Affordance: <span class="text-foreground">{{ hoveredModel.affordanceAcc }}%</span></div>
+          <div>Event F1: <span class="text-foreground font-semibold">{{ fmtPct(hoveredModel.score) }}</span></div>
+          <div>Topology F1: <span class="text-foreground">{{ fmtPct(hoveredModel.topologyF1) }}</span></div>
+          <div>Affordance: <span class="text-foreground">{{ fmtPct(hoveredModel.affordanceAcc) }}</span></div>
+          <div>State dyn.: <span class="text-foreground">{{ fmtPct(hoveredModel.stateTransitionAcc) }}</span></div>
+          <div>Cost: <span class="text-foreground">{{ fmtCost(hoveredModel.cost) }}</span></div>
+          <div>Tokens: <span class="text-foreground">{{ fmtTokens(hoveredModel) }}</span></div>
+          <div>Latency: <span class="text-foreground">{{ fmtLatency(hoveredModel.latency) }}</span></div>
+        </div>
+        <div v-if="hoveredModel.na.cost" class="mt-2 pt-2 border-t border-border/50 text-[11px] text-muted-foreground">
+          cost: {{ hoveredModel.na.cost }}
         </div>
       </div>
     </div>
+
+    <p class="mt-2 text-[12px] leading-relaxed text-muted-foreground">
+      Y = 100 × event-level macro-F1. X axis uses only measured values (nice max, reversed);
+      models with a missing score or missing value on the selected dimension are not plotted.
+      Disabled dimensions have no real measurement — they are never filled with placeholders.
+    </p>
   </div>
 </template>

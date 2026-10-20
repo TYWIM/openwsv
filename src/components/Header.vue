@@ -7,6 +7,7 @@ const emit = defineEmits<{
 }>();
 
 const currentTheme = ref<'dark' | 'light'>('dark');
+const THEME_KEY = 'starlife_theme';
 
 onMounted(() => {
   const isDark = document.documentElement.classList.contains('dark');
@@ -17,7 +18,7 @@ const toggleTheme = () => {
   const nextTheme = currentTheme.value === 'dark' ? 'light' : 'dark';
   currentTheme.value = nextTheme;
   try {
-    localStorage.setItem('openwsv_theme', nextTheme);
+    localStorage.setItem(THEME_KEY, nextTheme);
     const meta = document.querySelector('meta[name="color-scheme"]');
     if (nextTheme === 'dark') {
       document.documentElement.classList.add('dark');
@@ -35,14 +36,12 @@ const toggleTheme = () => {
 <template>
   <header class="border-b border-border bg-background sticky top-0 z-40 transition-colors">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
-      
       <div class="flex items-center shrink-0 gap-3">
         <a
           href="/"
           class="flex items-center gap-2.5 text-foreground group"
-          aria-label="OpenWSV Benchmark Home"
+          aria-label="StarLife-1-WSV Evaluation Home"
         >
-          
           <svg
             class="h-6 w-auto text-foreground shrink-0 transition-transform duration-200 group-hover:scale-105"
             viewBox="0 0 32 32"
@@ -61,20 +60,19 @@ const toggleTheme = () => {
           </svg>
           <div class="flex items-baseline gap-1.5">
             <span class="text-lg sm:text-[20px] font-semibold tracking-[-0.02em] leading-none text-foreground">
-              OpenWSV
+              StarLife-1-WSV
             </span>
             <span class="hidden sm:inline-block text-xs font-mono tracking-widest text-muted-foreground uppercase">
-              / BenchMark
+              / Evaluation
             </span>
           </div>
         </a>
         <span class="h-4 w-px bg-border ml-1 hidden sm:block" aria-hidden="true" />
         <span class="hidden sm:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono tracking-wider bg-secondary text-secondary-foreground border border-border">
-          MULTIMODAL 3D TOPOLOGY
+          OBSERVATION MODEL
         </span>
       </div>
 
-      
       <nav class="hidden md:flex items-center gap-1 text-sm min-w-0" aria-label="Main Navigation">
         <button
           type="button"
@@ -88,7 +86,7 @@ const toggleTheme = () => {
           @click="emit('navigate', 'tasks')"
           class="px-3 h-8 inline-flex items-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
         >
-          Tasks & Scenarios
+          Judgement Tasks
         </button>
         <button
           type="button"
@@ -99,24 +97,23 @@ const toggleTheme = () => {
         </button>
         <button
           type="button"
-          @click="emit('navigate', 'whitepaper')"
+          @click="emit('navigate', 'protocol')"
           class="px-3 h-8 inline-flex items-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
         >
-          Whitepaper
+          Protocol
         </button>
       </nav>
 
-      
       <div class="flex items-center gap-2">
         <a
-          href="https://github.com"
+          href="https://github.com/TYWIM/openwsv"
           target="_blank"
           rel="noopener noreferrer"
           class="h-8 px-2.5 inline-flex items-center gap-1.5 text-xs font-medium border border-border bg-background hover:bg-accent hover:text-foreground transition-colors"
-          aria-label="GitHub Repository"
+          aria-label="Upstream openwsv repository (UI source)"
         >
           <Github class="size-3.5" />
-          <span class="hidden sm:inline">Harness</span>
+          <span class="hidden sm:inline">Upstream UI</span>
         </a>
 
         <button
