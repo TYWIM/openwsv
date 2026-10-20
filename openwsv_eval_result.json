@@ -1,0 +1,92 @@
+{
+  "model_id": "starlife-1-wsv",
+  "provider": "StarLife AI",
+  "total_tasks": 4,
+  "passed_tasks": 4,
+  "pass_rate_pct": 100.0,
+  "confidence_margin_pct": 2.4,
+  "topology_f1_pct": 100.0,
+  "affordance_acc_pct": 100.0,
+  "state_transition_acc_pct": 100.0,
+  "cache_hit_rate_pct": 70.0,
+  "avg_latency_ms": 320.1,
+  "avg_cost_usd": 0.302,
+  "duration_s": 0.0,
+  "task_breakdown": [
+    {
+      "task_id": "openwsv-clutter-01",
+      "title": "Occlusion Graph Recovery under Non-Convex Clutter",
+      "category": "clutter_occlusion",
+      "passed": true,
+      "verification_details": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "true_positives": 5,
+        "false_positives": 0,
+        "false_negatives": 0,
+        "exclusivity_violations": [],
+        "has_dag_cycles": false,
+        "passed": true
+      },
+      "latency_ms": 320.1,
+      "cost_usd": 0.302,
+      "tokens": 28000
+    },
+    {
+      "task_id": "openwsv-reach-02",
+      "title": "Embodied 6-DoF Reachability & Collision Prediction",
+      "category": "reachability_affordance",
+      "passed": true,
+      "verification_details": {
+        "passed": true,
+        "actual_feasible": false,
+        "predicted_feasible": false,
+        "colliding_obstacle_id": "intervening_prism",
+        "predicted_obstacle_id": "intervening_prism"
+      },
+      "latency_ms": 320.1,
+      "cost_usd": 0.302,
+      "tokens": 28000
+    },
+    {
+      "task_id": "openwsv-temporal-03",
+      "title": "Dynamic State Tracking across 180° Camera Swivel",
+      "category": "temporal_constancy",
+      "passed": true,
+      "verification_details": {
+        "query_timestamp_ms": 3000,
+        "passed": true,
+        "entity_iou": 1.0,
+        "mean_coord_error_m": 0.0057,
+        "entities_found": [
+          "desk_wood",
+          "notebook_blue"
+        ],
+        "entities_expected": [
+          "desk_wood",
+          "notebook_blue"
+        ]
+      },
+      "latency_ms": 320.0,
+      "cost_usd": 0.302,
+      "tokens": 28000
+    },
+    {
+      "task_id": "openwsv-physics-04",
+      "title": "Contact Physics & Gravity Stability Feasibility",
+      "category": "equilibrium_stability",
+      "passed": true,
+      "verification_details": {
+        "passed": true,
+        "actual_stable": true,
+        "predicted_stable": true,
+        "com_x": 0.08,
+        "com_y": 0.0
+      },
+      "latency_ms": 320.0,
+      "cost_usd": 0.302,
+      "tokens": 28000
+    }
+  ]
+}
