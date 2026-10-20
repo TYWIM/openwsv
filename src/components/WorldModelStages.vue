@@ -1,18 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue';
 import { ArrowRight, Info } from 'lucide-vue-next';
-import { LEADERBOARD_META, WORLD_MODEL_LAYERS, WORLD_MODEL_SCOPE } from '../data/benchmarkData';
+import { WORLD_MODEL_LAYERS, WORLD_MODEL_SCOPE } from '../data/benchmarkData';
 
 const emit = defineEmits<{
   (e: 'navigate', targetId: string): void;
 }>();
-
-/** 基准范围（后端 meta.scope）；缺失则不渲染该块，不写死。 */
-const scope = computed(() => LEADERBOARD_META.scope);
-const openTo = computed(() => scope.value?.openTo || '');
-const testedItems = computed(() => scope.value?.tested ?? []);
-const notTestedItems = computed(() => scope.value?.notTested ?? []);
-const scopeNote = computed(() => scope.value?.note || '');
 </script>
 
 <template>
@@ -28,29 +20,6 @@ const scopeNote = computed(() => scope.value?.note || '');
           </h2>
           <p class="text-sm text-muted-foreground leading-relaxed text-pretty">
             {{ WORLD_MODEL_SCOPE.intro }}
-          </p>
-        </div>
-        <p v-if="openTo" class="mt-3 text-[12px] leading-relaxed text-muted-foreground">
-          <span class="font-mono uppercase tracking-wider text-foreground text-[11px]">Open to</span>
-          <span class="mx-2 text-border">|</span>{{ openTo }}
-        </p>
-
-        <!-- 基准范围（meta.scope）：测什么 / 不测什么 -->
-        <div v-if="testedItems.length > 0" class="mt-4 border border-border bg-card px-4 py-3">
-          <div class="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-            测什么 · Tested
-          </div>
-          <div class="mt-2 flex flex-wrap gap-1.5">
-            <span
-              v-for="item in testedItems"
-              :key="item"
-              class="inline-flex items-center border border-border bg-muted/30 px-2 py-0.5 text-[11px] text-foreground"
-            >
-              {{ item }}
-            </span>
-          </div>
-          <p v-if="scopeNote" class="mt-2.5 text-[11px] leading-relaxed text-muted-foreground">
-            {{ scopeNote }}
           </p>
         </div>
 
@@ -123,18 +92,9 @@ const scopeNote = computed(() => scope.value?.note || '');
           <div class="border border-border bg-card px-4 py-3">
             <div class="flex items-start gap-2">
               <Info class="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
-              <div class="text-[12px] leading-relaxed text-muted-foreground text-pretty">
-                <div class="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                  不测什么 · Not tested
-                </div>
-                <p class="mt-1">{{ WORLD_MODEL_SCOPE.notTested }}</p>
-                <ul v-if="notTestedItems.length > 0" class="mt-2 space-y-1">
-                  <li v-for="item in notTestedItems" :key="item" class="flex gap-1.5">
-                    <span class="text-muted-foreground/60" aria-hidden="true">·</span>
-                    <span>{{ item }}</span>
-                  </li>
-                </ul>
-              </div>
+              <p class="text-[12px] leading-relaxed text-muted-foreground text-pretty">
+                本评测覆盖 ②～⑥；① 作为给定条件（冻结编码器）。
+              </p>
             </div>
           </div>
         </div>

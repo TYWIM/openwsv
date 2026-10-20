@@ -135,16 +135,6 @@ export interface LeaderboardMeta {
   sourceRun: string | null;
   /** 综合分口径（后端 meta.composite）；旧版数据为 null。 */
   composite: CompositeMeta | null;
-  /** 基准范围（后端 meta.scope）：测什么 / 不测什么 / 对谁开放。 */
-  scope: BenchmarkScope | null;
-}
-
-export interface BenchmarkScope {
-  tested: string[];
-  notTested: string[];
-  openTo: string;
-  /** 后端对"被评对象不止一个"的补充说明（meta.scope.note）。 */
-  note: string;
 }
 
 export interface CompositeMeta {
@@ -444,20 +434,6 @@ export const LEADERBOARD_META: LeaderboardMeta = {
       method: toStr(raw.method, 'equal-weight'),
       dims: toNum(raw.n_dims) ?? toNum(raw.dims) ?? COMPOSITE_DIM_ORDER.length,
       formula: toStr(raw.formula, COMPOSITE_FORMULA_FALLBACK),
-      note: toStr(raw.note, ''),
-    };
-  })(),
-  scope: (() => {
-    const raw = isRecord(rawMeta.scope) ? rawMeta.scope : null;
-    if (!raw) return null;
-    const toStringArray = (value: unknown): string[] =>
-      Array.isArray(value)
-        ? value.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
-        : [];
-    return {
-      tested: toStringArray(raw.tested),
-      notTested: toStringArray(raw.notTested ?? raw.not_tested),
-      openTo: toStr(raw.openTo ?? raw.open_to, ''),
       note: toStr(raw.note, ''),
     };
   })(),

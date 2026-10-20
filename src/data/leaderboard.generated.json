@@ -1,34 +1,16 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "meta": {
     "benchmark": "空间理解与关系推理基准（Spatial & Relational Understanding Benchmark）",
     "benchmarkShort": "Spatial & Relational Understanding Benchmark",
-    "scope": {
-      "tested": [
-        "状态估计",
-        "变化识别",
-        "关系与拓扑",
-        "空间方位",
-        "接触/支撑（affordance）",
-        "事件化",
-        "世界状态一致性"
-      ],
-      "not_tested": [
-        "实体类型/词表分类（22 类 type）：云端模型没有类型输出，横向不可比，且不是本基准要测的能力",
-        "token 用量与成本：与「模型会不会空间推理」无关，不进榜单",
-        "生成式未来画面预测（future rollout）：那是世界模型的另一条路线"
-      ],
-      "open_to": "任何能输出逐 slot 变化（appeared/disappeared/displaced/none）与槽位对关系的视觉语言模型；专用头或零样本均可，模型自身架构不限。",
-      "note": "被评对象不止 StarLife：榜单里的本地头模型只是一个条目，云端零样本模型是同类参赛者。"
-    },
     "split": "test",
     "nPairs": 60,
     "nTestPairs": 200,
     "dataset": "dataset_spatial_v2",
     "checkpoints": "checkpoints/pilot_v2g",
     "sampleSeed": 20261020,
-    "generatedAt": "2026-10-20T16:15:35+00:00",
-    "sourceRun": "/tmp/sl_runs/full_v13",
+    "generatedAt": "2026-10-20T16:23:29+00:00",
+    "sourceRun": null,
     "artifacts": {
       "features_sha256_16": "7b2f0d1d30e7b70d",
       "manifest_sha256_16": "eefc6b3136af0245",

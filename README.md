@@ -1,4 +1,4 @@
-﻿# 空间理解与关系推理基准 — Benchmark Frontend
+# 空间理解与关系推理基准 — Benchmark Frontend
 
 **Spatial & Relational Understanding Benchmark** 的前端（Vue 3 + Vite 6 + Tailwind CSS 4）。
 这不是"某个模型的榜"，而是一个**通用模型的空间关系理解小切面基准**：
@@ -30,8 +30,7 @@ python -m starlife_eval leaderboard --run runs/v2g_real \
 - **榜单主分是 `compositeScore`（7 维等权综合分，0–100）**，按它排序与显示；
   `score`（可比事件分）等旧字段**保留**为展开明细，没有删除。
   综合分口径来自 `meta.composite`（等权、缺项自动从分母剔除），见下节契约。
-- 页面只保留一个运行时指标：**`latency`**（每事件端到端，含特征抽取 / API 往返；
-  云端受网络与输出长度影响）。**不展示成本、token 用量，也不把实体类别/词表分类当作基准项。**
+- 页面展示综合分、7 维分解与每个事件的端到端延迟（含特征抽取 / API 往返；云端受网络与输出长度影响）。
 - 数值口径见 `starlife_eval/ARCHITECTURE.md` §5.6：`score = 100 × event.macro_f1_common`、
   `topologyF1 = 100 × relation_type_acc`、`affordanceAcc = 100 × attrs_acc`、
   `stateTransitionAcc = 100 × change_top1`。
@@ -45,28 +44,22 @@ python -m starlife_eval leaderboard --run runs/v2g_real \
 静态文案（基准标题/副题/一句话定位、4 个判别任务、评测协议、7 维综合分的人话说明、
 "世界模型六层"定位）在 `src/data/benchmarkContent.ts`，不是评测结果，也不需要后端生成。
 
-## 数据契约（v3，供后端对齐，示例取自真实产物）
+## 数据契约（v4，供后端对齐，示例取自真实产物）
 
 ```jsonc
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "meta": {
-    "benchmark": "空间理解与关系推理基准", "split": "test",
+    "benchmark": "空间理解与关系推理基准（Spatial & Relational Understanding Benchmark）",
+    "benchmarkShort": "Spatial & Relational Understanding Benchmark",
+    "split": "test",
     "nPairs": 60, "nTestPairs": 200,
     "dataset": "dataset_spatial_v2", "checkpoints": "checkpoints/pilot_v2g",
-    "sampleSeed": 20261020, "generatedAt": "2026-10-20T16:08:05+00:00",
-    "sourceRun": "/workspace/starlife_eval/runs/full_v11",
+    "sampleSeed": 20261020, "generatedAt": "2026-10-20T16:15:35+00:00",
+    "sourceRun": "/tmp/sl_runs/full_v13",
     "artifacts": { "features_sha256_16": "…", "manifest_sha256_16": "…", "cloud_cache_sha256_16": "…" },
     "telemetry": { "tasks": 5, "scenes": null, "pairs": 60, "testPairs": 200,
                    "slots": 5830, "relations": 2575, "models": 6 },
-    "scope": {
-      "tested": ["状态估计", "变化识别", "关系与拓扑", "空间方位",
-                 "接触/支撑(affordance)", "事件化", "世界状态一致性"],
-      "notTested": ["实体类型/词表分类（云端无类型输出，且不是本基准要测的能力）",
-                    "token 用量与成本",
-                    "生成式未来画面预测（future rollout）"],
-      "openTo": "任何能输出 changes/relations 的视觉语言模型（零样本或专用头均可）"
-    },
     "composite": {
       "name": "综合能力分", "method": "equal-weight",
       "formula": "7 个维度（0-100）等权平均；缺项自动从分母剔除，不当 0 分",
@@ -137,22 +130,21 @@ python -m starlife_eval leaderboard --run runs/v2g_real \
 }
 ```
 
-- **删除字段（不是改名）**：`models[]` 不再有 `cost`、`tokens`、`tokenNum`；
-  页面也不再展示这三项，运行时指标只剩 `latency`。
-- `metrics.head` 只保留 change / relation / rel_pos / attrs 相关键，**没有 `type_*`**；
-  实体类别/词表分类不再作为基准项（页面不展示）。
+- `models[]` 行字段：`id` / `name` / `family` / `provider` / `mode` / `version` / `isBest` /
+  `confidence` / `compositeScore` / `composite` / `score` / `topologyF1` / `affordanceAcc` /
+  `stateTransitionAcc` / `latency` / `na` / `metrics`。
+- `metrics.head` 的键为 change / relation / rel_pos / attrs 相关指标。
 - `compositeScore` 是**榜单主分**（0–100）；`composite.dims` 固定 7 项（`key` 为
   `change_top1`/`change_balance`/`relation_type`/`rel_pos`/`attrs`/`event_f1`/`state_consistency`），
   `value` 已 ×100、`available=false` 或缺项时自动从分母剔除。前端展开行渲染 7 维小条 +
   `meta.composite.formula` 一行字 + `weights` 来源说明（等权 1/7，不预设哪个维度更重要），
   并按 `key` 匹配 `benchmarkContent.ts` 里"一句话 + 怎么看"的人话说明。
-- `meta.scope` 由前端渲染为"基准范围"：测什么（tested）、不测什么（notTested）、对谁开放（openTo）。
 - **参赛方式**：`mode` 为 `LOCAL-HEADS` 的行在前端显示为 `local-heads`（有监督专用头），
   `ZERO-SHOT` 显示为 `zero-shot`（零样本通用模型）。页面明确提示**两类不可直接等量齐观**
   （专用头见过训练集、零样本没有），详见 reliability 报告。
 - **综合分依赖权重（已知性质）**：换一组权重，云端 4 个模型的名次会互换，但本地两行始终第一；
-  详见 reliability 报告。因此本页不做"绝对排名"表述；前两名（v2 / v2g）综合分差 0.1 分，
-  约等于打平（差值由前端按数据实时计算，不手抄）；行内只有 `isBest` 徽标，没有"第 N 强"文案。
+  详见 reliability 报告。前两名（v2 / v2g）综合分差 0.1 分，约等于打平（差值由前端按数据实时计算，
+  不手抄）；行内只有 `isBest` 徽标。
 - 7 维中的两个口径提醒放在展开区 tooltip：`rel_pos` 只统计**关系判定正确后**的方位；
   `state_consistency` **不含实体类别维度**。
 - `score`/`topologyF1`/`affordanceAcc`/`stateTransitionAcc` 是 **0–100 的百分数**（§5.6 映射），
@@ -162,8 +154,7 @@ python -m starlife_eval leaderboard --run runs/v2g_real \
 - `metrics` 可选，表格行可展开查看明细；缺失（或某分组为 `null`）时对应分组不显示。
   注意 `metrics.state` 是**数字**（state_acc），`head`/`pair`/`event` 是对象。
 - `version`/`isBest` 用于筛选与强调；`confidence` 目前恒为 `null`（未做 95% bootstrap），UI 隐藏。
-- `na` 给字段级 N/A 原因（例如云端零样本没有头级概率分布）；UI 在展开行里按可读标签显示，
-  并过滤掉已移除口径（用量/成本/类别）的旧键，不显示空 tooltip。
+- `na` 给字段级 N/A 原因（例如云端零样本没有头级概率分布）；UI 在展开行里按可读标签显示。
 - `meta.telemetry` 只用于首页计数，取不到的键写 `null`（UI 隐藏该项，不写死）：
   `pairs` = 每模型实际评测的对数（60，榜单可比范围），`testPairs` = test split 总对数（数据集规模）。
 
