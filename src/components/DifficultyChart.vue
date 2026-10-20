@@ -16,7 +16,7 @@ const props = withDefaults(
     meta?: LeaderboardMeta | null;
     /** 仅测试用：预置选中的模型，便于 SSR 验证 tooltip 内容。 */
     initialActiveId?: string;
-    /** 仅测试用：预置悬停的档位下标（0–3）。 */
+    /** 仅测试用：预置悬停的档位下标（0 = 档 4，3 = 档 1）。 */
     initialBucket?: number;
     /** 仅测试用：预置家族筛选。 */
     initialFamilies?: string[];
@@ -35,9 +35,9 @@ const props = withDefaults(
   },
 );
 
-const VB_W = 800;
+const VB_W = 900;
 const VB_H = 420;
-const PAD = { top: 18, right: 24, bottom: 46, left: 46 };
+const PAD = { top: 18, right: 210, bottom: 46, left: 46 };
 const PLOT_W = VB_W - PAD.left - PAD.right;
 const PLOT_H = VB_H - PAD.top - PAD.bottom;
 /** Y 轴只画 60–100；<60 的点钳制在 60 底线上并用 ▼ 标记（tooltip 仍显示真实值）。 */
@@ -51,6 +51,10 @@ const pointY = (value: number) => {
   return PAD.top + (1 - (clamped - Y_MIN) / (Y_MAX - Y_MIN)) * PLOT_H;
 };
 const GRID_LINES = [60, 70, 80, 90, 100];
+/** 线端标签之间的最小竖向间距（viewBox 单位）。 */
+const END_LABEL_GAP = 24;
+const END_LABEL_X = xFor(DISPLAY_BUCKETS.length - 1) + 16;
+const HIGHLIGHT_SECOND_ID = 'claude-opus-5-5';
 
 // ------------------------------------------------------------------ 交互状态
 
@@ -65,6 +69,7 @@ const activeId = ref<string | null>(props.initialActiveId ?? null);
 const hoverBucket = ref<number | null>(props.initialBucket ?? null);
 
 const isLocal = (model: ModelResult) => /local/i.test(model.mode) || model.family === 'StarLife';
+const isSecondHighlight = (model: ModelResult) => model.id === HIGHLIGHT_SECOND_ID;
 const modeBadge = (model: ModelResult) => (isLocal(model) ? 'L' : 'Z');
 
 const scoredModels = computed(() =>
@@ -72,14 +77,6 @@ const scoredModels = computed(() =>
 );
 
 const scoreOf = (model: ModelResult): number => model.compositeScore ?? 0;
-
-/** 综合分排名（只统计有综合分的模型），下标从 1 开始。 */
-const rankMap = computed(() => {
-  const sorted = [...scoredModels.value].sort((a, b) => scoreOf(b) - scoreOf(a));
-  const map = new Map<string, number>();
-  sorted.forEach((model, index) => map.set(model.id, index + 1));
-  return map;
-});
 
 const familyCount = (family: string) =>
   scoredModels.value.filter((model) => model.family === family).length;
@@ -110,12 +107,6 @@ const toggleTop = () => {
   topOnly.value = !topOnly.value;
 };
 
-const toggleModel = (id: string) => {
-  hiddenIds.value = hiddenIds.value.includes(id)
-    ? hiddenIds.value.filter((item) => item !== id)
-    : [...hiddenIds.value, id];
-};
-
 const familyFiltered = computed(() =>
   [...scoredModels.value]
     .filter((model) => selectedFamilies.value.includes(model.family))
@@ -127,26 +118,17 @@ const chartModels = computed(() => {
   return base.filter((model) => !hiddenIds.value.includes(model.id));
 });
 
-/** 绘制顺序：先零样本，后本地头，最后是当前选中的模型；本地头始终最上层。 */
+/** 绘制顺序：先普通线，再第二高亮（claude），最后本地头；本地头始终最上层。 */
 const drawOrder = computed(() => {
   const order = (model: ModelResult) => {
     let key = 0;
+    if (isSecondHighlight(model)) key += 1;
     if (isLocal(model)) key += 2;
-    if (model.id === activeId.value) key += 1;
+    if (model.id === activeId.value) key += 0.5;
     return key;
   };
   return [...chartModels.value].sort((a, b) => order(a) - order(b));
 });
-
-const legendModels = computed(() =>
-  [...scoredModels.value].sort((a, b) => scoreOf(b) - scoreOf(a)),
-);
-
-const rankingModels = computed(() =>
-  [...chartModels.value].sort(
-    (a, b) => (rankMap.value.get(a.id) ?? 99) - (rankMap.value.get(b.id) ?? 99),
-  ),
-);
 
 /** 同家族多模型时，色系相同、明度递进；首条用家族主色。 */
 const indexInFamily = computed(() => {
@@ -220,12 +202,83 @@ const lines = computed<ChartLine[]>(() =>
   }),
 );
 
+const lineWidth = (model: ModelResult): number => {
+  if (isLocal(model)) return 3;
+  if (isSecondHighlight(model)) return 2;
+  return 1.5;
+};
+
+const baseOpacity = (model: ModelResult): number => {
+  if (isLocal(model)) return 1;
+  if (isSecondHighlight(model)) return 0.85;
+  return 0.55;
+};
+
 const lineOpacity = (model: ModelResult): number => {
-  if (!activeId.value) return isLocal(model) ? 1 : 0.8;
+  if (!activeId.value) return baseOpacity(model);
   return model.id === activeId.value ? 1 : 0.15;
 };
 
-const lineWidth = (model: ModelResult): number => (isLocal(model) ? 3 : 1.5);
+const endPointRadius = (model: ModelResult, bucketIndex: number): number => {
+  if (bucketIndex !== DISPLAY_BUCKETS.length - 1) return isLocal(model) ? 3 : 2.4;
+  if (isLocal(model)) return 4.5;
+  if (isSecondHighlight(model)) return 3.4;
+  return 3;
+};
+
+const labelWeight = (model: ModelResult): number => {
+  if (isLocal(model)) return 700;
+  if (isSecondHighlight(model)) return 600;
+  return 500;
+};
+
+// ------------------------------------------------------------------ 线端标签
+
+interface EndLabel {
+  model: ModelResult;
+  color: string;
+  x: number;
+  pointY: number;
+  labelY: number;
+  rank: number;
+}
+
+/** 右端标签按综合分从高到低向下排，最小间距 16px（超界时整体上移）。 */
+const endLabels = computed<EndLabel[]>(() => {
+  const items: EndLabel[] = [...chartModels.value]
+    .sort((a, b) => scoreOf(b) - scoreOf(a))
+    .map((model, rank) => {
+      const points = curvePoints(model);
+      const last = points[points.length - 1];
+      return {
+        model,
+        color: colorFor(model),
+        x: last?.x ?? xFor(DISPLAY_BUCKETS.length - 1),
+        pointY: last?.y ?? PAD.top,
+        labelY: last?.y ?? PAD.top,
+        rank,
+      };
+    });
+
+  let cursor = PAD.top;
+  for (const item of items) {
+    item.labelY = Math.max(item.pointY, cursor);
+    cursor = item.labelY + END_LABEL_GAP;
+  }
+  const bottom = PAD.top + PLOT_H;
+  if (items.length && items[items.length - 1].labelY > bottom) {
+    let next = bottom;
+    for (let index = items.length - 1; index >= 0; index -= 1) {
+      items[index].labelY = Math.min(items[index].labelY, next);
+      next = items[index].labelY - END_LABEL_GAP;
+    }
+  }
+  return items;
+});
+
+/** 窄屏只保留前 4 名 + 本地头，其余隐藏（仍在 DOM 里，靠 hover 看 tooltip）。 */
+const hideOnNarrow = (label: EndLabel): boolean =>
+  label.rank > 3 && !isLocal(label.model);
 
 // -------------------------------------------------------------------- tooltip
 
@@ -307,48 +360,110 @@ const focusLine = (model: ModelResult) => {
   setActive(model);
   if (hoverBucket.value == null) hoverBucket.value = 0;
 };
+
+// ------------------------------------------------------------------ 图上批注
+
+const bucketValue = (modelId: string, bucketKey: string): number | null => {
+  const point = difficultyFor(modelId)?.points.find((item) => item.bucket === bucketKey);
+  return point?.composite ?? null;
+};
+
+const starlifeModel = computed(
+  () => scoredModels.value.find((model) => model.id === 'starlife-v1-wsv') ?? null,
+);
+
+/** 每个档位上前两名分差（用于判断“领先”文案，不写死数字）。 */
+const leadAt = (bucketKey: string): number | null => {
+  const values = scoredModels.value
+    .map((model) => bucketValue(model.id, bucketKey))
+    .filter((value): value is number => value != null)
+    .sort((a, b) => b - a);
+  if (values.length < 2) return null;
+  return values[0] - values[1];
+};
+
+const annotations = computed(() => {
+  const model = starlifeModel.value;
+  if (!model) return [];
+  const hardX = xFor(0);
+  const easyX = xFor(DISPLAY_BUCKETS.length - 1);
+  const hardPoint = curvePoints(model).find((point) => point.bucketIndex === 0);
+  const easyPoint = curvePoints(model).find(
+    (point) => point.bucketIndex === DISPLAY_BUCKETS.length - 1,
+  );
+  const hardLead = leadAt('b4');
+  const easyLead = leadAt('b1');
+  const list: Array<{
+    key: string;
+    text: string;
+    x: number;
+    y: number;
+    textX: number;
+    textY: number;
+    anchor: 'start' | 'end';
+  }> = [];
+  if (hardPoint && hardLead != null) {
+    list.push({
+      key: 'hardest',
+      text: `最难档：领先收窄到 ${hardLead.toFixed(1)} 分`,
+      x: hardX,
+      y: hardPoint.y,
+      textX: hardX + 14,
+      textY: hardPoint.y - 24,
+      anchor: 'start',
+    });
+  }
+  if (easyPoint && easyLead != null) {
+    list.push({
+      key: 'easiest',
+      text: `最易档：领先 ${easyLead.toFixed(1)} 分`,
+      x: easyX,
+      y: easyPoint.y,
+      textX: easyX - 14,
+      textY: easyPoint.y + 20,
+      anchor: 'end',
+    });
+  }
+  return list;
+});
+
+const labelSubline = (model: ModelResult): string => `综合分 ${scoreOf(model).toFixed(1)}`;
 </script>
 
 <template>
   <section class="mt-8 border border-border bg-card/40 p-4 sm:p-5">
-    <!-- 顶部工具条：家族筛选 + Top 6 / 全部 -->
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-      <div class="min-w-0">
-        <div class="flex flex-wrap items-center gap-1.5">
-          <span class="mr-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-            Family
-          </span>
-          <button
-            v-for="family in allFamilies"
-            :key="family"
-            type="button"
-            data-family-chip
-            class="inline-flex h-6 items-center gap-1 border px-2 text-[11px] transition-colors cursor-pointer"
-            :class="
-              familySelected(family)
-                ? 'border-foreground/40 bg-foreground/5 text-foreground'
-                : 'border-border bg-background text-muted-foreground hover:text-foreground'
-            "
-            :aria-pressed="familySelected(family)"
-            :disabled="familyCount(family) === 0"
-            :title="`${family} · ${familyCount(family)} 个模型`"
-            @click="toggleFamily(family)"
-          >
-            <span>{{ family }}</span>
-            <span
-              class="font-mono text-[9px]"
-              :class="familySelected(family) ? 'text-muted-foreground' : 'text-muted-foreground/60'"
-            >
-              {{ familyCount(family) }}
-            </span>
-          </button>
-        </div>
-      </div>
-      <div class="flex shrink-0 items-center gap-2">
-        <div class="inline-flex border border-border bg-background p-0.5" role="group" aria-label="显示范围">
+    <!-- 顶部工具条：说明 + 家族筛选 / Top 6（右上角一排小控件，弱化） -->
+    <div class="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+      <p class="max-w-[34rem] text-[11px] leading-relaxed text-muted-foreground">
+        按场景复杂度看趋势：横轴左难右易，同一档上越高越好；线端直接标模型名与综合分。未给出综合分的模型不进图。
+      </p>
+      <div class="flex flex-wrap items-center justify-start gap-1 lg:justify-end">
+        <button
+          v-for="family in allFamilies"
+          :key="family"
+          type="button"
+          data-family-chip
+          class="inline-flex h-5 items-center border px-1.5 font-mono text-[9px] uppercase tracking-wide transition-colors cursor-pointer"
+          :class="
+            familySelected(family)
+              ? 'border-foreground/30 bg-foreground/5 text-foreground'
+              : 'border-transparent bg-background text-muted-foreground/70 hover:text-foreground'
+          "
+          :aria-pressed="familySelected(family)"
+          :disabled="familyCount(family) === 0"
+          :title="`${family} · ${familyCount(family)} 个模型`"
+          @click="toggleFamily(family)"
+        >
+          {{ family }}
+        </button>
+        <div
+          class="ml-1 inline-flex border border-border/70 bg-background p-0.5"
+          role="group"
+          aria-label="显示范围"
+        >
           <button
             type="button"
-            class="h-6 px-2 text-[11px] transition-colors cursor-pointer"
+            class="h-4 px-1.5 text-[9px] transition-colors cursor-pointer"
             :class="topOnly ? 'bg-foreground text-background' : 'text-muted-foreground'"
             :aria-pressed="topOnly"
             @click="toggleTop"
@@ -357,7 +472,7 @@ const focusLine = (model: ModelResult) => {
           </button>
           <button
             type="button"
-            class="h-6 px-2 text-[11px] transition-colors cursor-pointer"
+            class="h-4 px-1.5 text-[9px] transition-colors cursor-pointer"
             :class="!topOnly ? 'bg-foreground text-background' : 'text-muted-foreground'"
             :aria-pressed="!topOnly"
             @click="toggleTop"
@@ -367,332 +482,306 @@ const focusLine = (model: ModelResult) => {
         </div>
       </div>
     </div>
-    <p class="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-      按场景复杂度看趋势：横轴从档 1 到档 4 逐档变难，同一档上越高越好。未给出综合分的模型不进图（表格中显示为 N/A）。
-    </p>
 
-    <!-- 主体：趋势图 + 右侧综合分排名 -->
-    <div class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_224px]">
-      <div class="min-w-0">
-        <div class="relative">
-          <svg
-            :viewBox="`0 0 ${VB_W} ${VB_H}`"
-            class="block h-auto w-full select-none"
-            role="img"
-            aria-label="分档综合分趋势图"
-            @mousemove="handleChartMove"
-            @mouseleave="clearHover"
-          >
-            <!-- 横向网格 + Y 轴刻度 -->
-            <g aria-hidden="true">
-              <line
-                v-for="tick in GRID_LINES"
-                :key="`grid-${tick}`"
-                :x1="PAD.left"
-                :x2="VB_W - PAD.right"
-                :y1="pointY(tick)"
-                :y2="pointY(tick)"
-                stroke="var(--border)"
-                :stroke-dasharray="tick === 0 ? 'none' : '2 4'"
-                stroke-width="1"
-              />
-              <text
-                v-for="tick in GRID_LINES"
-                :key="`tick-${tick}`"
-                :x="PAD.left - 8"
-                :y="pointY(tick) + 3"
-                data-y-tick
-                text-anchor="end"
-                class="fill-muted-foreground font-mono"
-                font-size="9"
-              >
-                {{ tick }}
-              </text>
-              <text
-                :x="12"
-                :y="PAD.top + PLOT_H / 2"
-                :transform="`rotate(-90 12 ${PAD.top + PLOT_H / 2})`"
-                text-anchor="middle"
-                class="fill-muted-foreground"
-                font-size="9"
-              >
-                分档综合分
-              </text>
-            </g>
-
-            <!-- 难度档竖线 + X 轴档位标签 / 每档 n -->
-            <g aria-hidden="true">
-              <line
-                v-for="(bucket, index) in DISPLAY_BUCKETS"
-                :key="`axis-${bucket.key}`"
-                :x1="xFor(index)"
-                :x2="xFor(index)"
-                :y1="PAD.top"
-                :y2="PAD.top + PLOT_H"
-                stroke="var(--border)"
-                stroke-width="1"
-              />
-              <text
-                v-for="(bucket, index) in DISPLAY_BUCKETS"
-                :key="`bucket-label-${bucket.key}`"
-                data-bucket-label
-                :x="xFor(index)"
-                :y="VB_H - 24"
-                text-anchor="middle"
-                class="fill-muted-foreground font-mono"
-                font-size="10"
-              >
-                {{ bucket.label }}
-              </text>
-              <text
-                v-for="(bucket, index) in DISPLAY_BUCKETS"
-                :key="`bucket-n-${bucket.key}`"
-                data-bucket-n
-                :x="xFor(index)"
-                :y="VB_H - 8"
-                text-anchor="middle"
-                class="fill-muted-foreground"
-                font-size="9"
-              >
-                n={{ bucket.n }}
-              </text>
-            </g>
-
-            <!-- 悬停档位竖线 -->
-            <line
-              v-if="hoverBucket != null"
-              :x1="xFor(hoverBucket)"
-              :x2="xFor(hoverBucket)"
-              :y1="PAD.top"
-              :y2="PAD.top + PLOT_H"
-              stroke="var(--muted-foreground)"
-              stroke-width="1"
-              stroke-dasharray="3 3"
-              aria-hidden="true"
-            />
-
-            <!-- 每个模型一条折线（本地头加粗且最后绘制，始终最上层） -->
-            <g
-              v-for="line in lines"
-              :key="line.model.id"
-              data-chart-line
-              :data-model-id="line.model.id"
-              class="outline-none"
-              tabindex="0"
-              role="img"
-              :aria-label="`${line.model.name}，分档综合分趋势`"
-              @mouseenter="setActive(line.model)"
-              @focus="focusLine(line.model)"
-              @blur="activeId = null"
-            >
-              <path
-                v-if="line.path"
-                :d="line.path"
-                fill="none"
-                :stroke="line.color"
-                :stroke-width="lineWidth(line.model)"
-                :stroke-opacity="lineOpacity(line.model)"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-              <template v-for="point in line.points" :key="`${line.model.id}-p-${point.bucketIndex}`">
-                <circle
-                  v-if="!point.clamped"
-                  data-chart-point
-                  :cx="point.x"
-                  :cy="point.y"
-                  :r="isLocal(line.model) ? 3.2 : 2.4"
-                  :fill="isLocal(line.model) ? line.color : 'var(--background)'"
-                  :fill-opacity="isLocal(line.model) ? lineOpacity(line.model) : 1"
-                  :stroke="line.color"
-                  :stroke-opacity="lineOpacity(line.model)"
-                  :stroke-width="isLocal(line.model) ? 1 : 1.4"
-                />
-                <path
-                  v-else
-                  data-chart-clamped
-                  :data-bucket="point.point.bucket"
-                  :d="trianglePath(point)"
-                  :fill="isLocal(line.model) ? line.color : 'var(--background)'"
-                  :fill-opacity="isLocal(line.model) ? lineOpacity(line.model) : 1"
-                  :stroke="line.color"
-                  :stroke-opacity="lineOpacity(line.model)"
-                  stroke-width="1.4"
-                  stroke-linejoin="round"
-                />
-              </template>
-              <circle
-                v-for="point in line.points"
-                :key="`${line.model.id}-hit-${point.bucketIndex}`"
-                data-chart-hit
-                :cx="point.x"
-                :cy="point.y"
-                r="10"
-                fill="transparent"
-                class="cursor-crosshair"
-                @mouseenter="setActive(line.model, point.bucketIndex)"
-              />
-            </g>
-
-            <!-- 当前悬停节点的强调环 -->
-            <circle
-              v-if="activePoint"
-              :cx="activePoint.x"
-              :cy="activePoint.y"
-              r="5.5"
-              fill="none"
-              stroke="var(--foreground)"
-              stroke-width="1.5"
-              aria-hidden="true"
-            />
-          </svg>
-
-          <!-- tooltip（模型 / 档位 + n / 分档综合分 / 7 维明细） -->
-          <div
-            v-if="tooltip"
-            data-chart-tooltip
-            class="pointer-events-none absolute z-20 w-[210px] border border-border bg-popover px-2.5 py-2 shadow-sm"
-            :style="{ left: tooltip.left, top: tooltip.top, transform: tooltip.transform }"
-          >
-            <div class="flex items-center gap-1.5 text-[11px] font-medium text-foreground">
-              <span
-                class="inline-block size-2 shrink-0"
-                :style="{ backgroundColor: colorFor(tooltip.model) }"
-                aria-hidden="true"
-              />
-              <span class="truncate">{{ tooltip.model.name }}</span>
-              <span class="font-mono text-[9px] text-muted-foreground">
-                {{ modeBadge(tooltip.model) }}
-              </span>
-            </div>
-            <div class="mt-1 flex items-baseline justify-between gap-2 text-[10px] text-muted-foreground">
-              <span>{{ tooltip.bucket.label }} · n={{ tooltip.bucket.n }}</span>
-              <span class="font-mono">
-                难度 {{ tooltip.bucket.difficulty[0] }}–{{ tooltip.bucket.difficulty[1] }}
-              </span>
-            </div>
-            <div class="mt-1 font-mono text-[12px] text-foreground">
-              分档综合分
-              <span class="ml-1 text-sm">{{ tooltip.scoreText }}</span>
-              <span v-if="tooltip.clamped" class="ml-1 text-[10px] text-muted-foreground">▼</span>
-            </div>
-            <div class="mt-1.5 space-y-0.5 border-t border-border pt-1.5">
-              <div
-                v-for="dim in DIFFICULTY_DIMS"
-                :key="`tt-${dim.key}`"
-                class="flex items-baseline justify-between gap-2 text-[10px]"
-              >
-                <span class="text-muted-foreground">{{ dim.label }}</span>
-                <span class="font-mono text-foreground">
-                  {{ fmtPct(tooltip.point.dims[dim.key]) }}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div
-            v-if="chartModels.length === 0"
-            class="absolute inset-0 flex items-center justify-center bg-card/70 text-[12px] text-muted-foreground"
-          >
-            当前筛选下没有可绘制的模型
-          </div>
-        </div>
-
-        <!-- 图下说明：数据口径与“别过度解读” -->
-        <p data-chart-note class="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-          {{ DIFFICULTY_NOTE }} 分档诊断为辅助视图，榜单主分见表格。
-        </p>
-      </div>
-
-      <!-- 侧部：综合分排名（窄屏下沉到图下方） -->
-      <aside class="min-w-0">
-        <div class="flex items-baseline justify-between">
-          <span class="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-            综合分排名
-          </span>
-          <span class="font-mono text-[10px] text-muted-foreground">
-            {{ rankingModels.length }} 条
-          </span>
-        </div>
-        <ol class="mt-2 space-y-1">
-          <li v-for="model in rankingModels" :key="`rank-${model.id}`">
-            <button
-              type="button"
-              data-rank-item
-              class="group flex w-full items-center gap-1.5 px-1 py-0.5 text-left transition-colors hover:bg-accent/60 focus-visible:bg-accent/60 cursor-pointer"
-              :aria-label="`${model.name} 综合分 ${fmtPct(model.compositeScore)}`"
-              @mouseenter="setActive(model)"
-              @mouseleave="activeId = null"
-              @focus="setActive(model)"
-              @blur="activeId = null"
-            >
-              <span class="w-3 shrink-0 font-mono text-[10px] text-muted-foreground">
-                {{ rankMap.get(model.id) }}
-              </span>
-              <span
-                class="inline-block size-2 shrink-0"
-                :style="{ backgroundColor: colorFor(model) }"
-                aria-hidden="true"
-              />
-              <span class="w-0 flex-1 truncate text-[11px] text-foreground">{{ model.name }}</span>
-              <span class="shrink-0 font-mono text-[10px] text-muted-foreground">
-                {{ fmtPct(model.compositeScore) }}
-              </span>
-            </button>
-            <div class="mt-0.5 h-1 w-full bg-muted/40" aria-hidden="true">
-              <div
-                class="h-1"
-                :style="{ width: `${model.compositeScore ?? 0}%`, backgroundColor: colorFor(model) }"
-              />
-            </div>
-          </li>
-        </ol>
-        <p v-if="chartModels.length < scoredModels.length" class="mt-2 text-[10px] text-muted-foreground">
-          当前显示 {{ chartModels.length }} / {{ scoredModels.length }} 条。
-        </p>
-      </aside>
-    </div>
-
-    <!-- 底部：图例（按综合分排序，点击显示/隐藏） -->
-    <div class="mt-3 border-t border-border pt-3">
-      <div
-        class="grid grid-flow-col grid-rows-2 gap-x-3 gap-y-1 overflow-x-auto pb-1 sm:flex sm:flex-wrap sm:overflow-visible sm:pb-0"
-        role="group"
-        aria-label="模型图例"
+    <!-- 主体：全宽趋势图；右侧留出线端标签空间 -->
+    <div class="relative mt-3">
+      <svg
+        :viewBox="`0 0 ${VB_W} ${VB_H}`"
+        class="block h-auto w-full select-none"
+        role="img"
+        aria-label="分档综合分趋势图"
+        @mousemove="handleChartMove"
+        @mouseleave="clearHover"
       >
-        <button
-          v-for="model in legendModels"
-          :key="`legend-${model.id}`"
-          type="button"
-          data-legend-item
-          class="group inline-flex items-center gap-1.5 border border-transparent px-1 py-0.5 text-[11px] transition-opacity cursor-pointer"
-          :class="
-            hiddenIds.includes(model.id)
-              ? 'opacity-35 line-through'
-              : 'opacity-100 hover:border-border'
-          "
-          :aria-pressed="!hiddenIds.includes(model.id)"
-          :title="`${model.name} · ${fmtPct(model.compositeScore)}`"
-          @click="toggleModel(model.id)"
-          @mouseenter="!hiddenIds.includes(model.id) && setActive(model)"
-          @mouseleave="activeId = null"
-          @focus="!hiddenIds.includes(model.id) && setActive(model)"
+        <!-- Y 轴：浅灰横网格 + 稀疏刻度（无边框、无 tick 竖线） -->
+        <g aria-hidden="true">
+          <line
+            v-for="tick in GRID_LINES"
+            :key="`grid-${tick}`"
+            :x1="PAD.left"
+            :x2="PAD.left + PLOT_W"
+            :y1="pointY(tick)"
+            :y2="pointY(tick)"
+            stroke="var(--border)"
+            :stroke-dasharray="tick === Y_MIN ? 'none' : '3 5'"
+            stroke-width="1"
+            stroke-opacity="0.7"
+          />
+          <text
+            v-for="tick in GRID_LINES"
+            :key="`tick-${tick}`"
+            :x="PAD.left - 10"
+            :y="pointY(tick) + 3"
+            data-y-tick
+            text-anchor="end"
+            class="fill-muted-foreground/80 font-mono"
+            font-size="9"
+          >
+            {{ tick }}
+          </text>
+          <text
+            :x="12"
+            :y="PAD.top + PLOT_H / 2"
+            :transform="`rotate(-90 12 ${PAD.top + PLOT_H / 2})`"
+            text-anchor="middle"
+            class="fill-muted-foreground/70"
+            font-size="9"
+          >
+            分档综合分
+          </text>
+        </g>
+
+        <!-- X 轴：只保留档位标签 + n=15，不画边框 -->
+        <g aria-hidden="true">
+          <text
+            v-for="(bucket, index) in DISPLAY_BUCKETS"
+            :key="`bucket-label-${bucket.key}`"
+            data-bucket-label
+            :x="xFor(index)"
+            :y="VB_H - 24"
+            text-anchor="middle"
+            class="fill-muted-foreground/80 font-mono"
+            font-size="10"
+          >
+            {{ bucket.label }}
+          </text>
+          <text
+            v-for="(bucket, index) in DISPLAY_BUCKETS"
+            :key="`bucket-n-${bucket.key}`"
+            data-bucket-n
+            :x="xFor(index)"
+            :y="VB_H - 8"
+            text-anchor="middle"
+            class="fill-muted-foreground/60"
+            font-size="9"
+          >
+            n={{ bucket.n }}
+          </text>
+        </g>
+
+        <!-- 悬停档位竖线 -->
+        <line
+          v-if="hoverBucket != null"
+          :x1="xFor(hoverBucket)"
+          :x2="xFor(hoverBucket)"
+          :y1="PAD.top"
+          :y2="PAD.top + PLOT_H"
+          stroke="var(--muted-foreground)"
+          stroke-width="1"
+          stroke-dasharray="3 3"
+          stroke-opacity="0.6"
+          aria-hidden="true"
+        />
+
+        <!-- 每个模型一条折线（普通线细/半透明，claude 第二高亮，本地头最粗置顶） -->
+        <g
+          v-for="line in lines"
+          :key="line.model.id"
+          data-chart-line
+          :data-model-id="line.model.id"
+          class="outline-none"
+          tabindex="0"
+          role="img"
+          :aria-label="`${line.model.name}，分档综合分趋势`"
+          @mouseenter="setActive(line.model)"
+          @focus="focusLine(line.model)"
           @blur="activeId = null"
         >
-          <span class="relative inline-flex size-2.5 shrink-0" aria-hidden="true">
-            <span class="absolute inset-0" :style="{ backgroundColor: colorFor(model) }" />
-            <span
-              class="absolute -right-1 -top-1 bg-background px-[2px] font-mono text-[7px] leading-tight text-foreground"
+          <path
+            v-if="line.path"
+            :d="line.path"
+            fill="none"
+            :stroke="line.color"
+            :stroke-width="lineWidth(line.model)"
+            :stroke-opacity="lineOpacity(line.model)"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+          <template v-for="point in line.points" :key="`${line.model.id}-p-${point.bucketIndex}`">
+            <path
+              v-if="point.clamped"
+              data-chart-clamped
+              :data-bucket="point.point.bucket"
+              :d="trianglePath(point)"
+              :fill="line.color"
+              :fill-opacity="lineOpacity(line.model)"
+              :stroke="line.color"
+              :stroke-opacity="lineOpacity(line.model)"
+              stroke-width="1.4"
+              stroke-linejoin="round"
+            />
+            <circle
+              v-else
+              data-chart-point
+              :cx="point.x"
+              :cy="point.y"
+              :r="endPointRadius(line.model, point.bucketIndex)"
+              :fill="line.color"
+              :fill-opacity="lineOpacity(line.model)"
+              :stroke="'var(--card)'"
+              stroke-width="1"
+            />
+          </template>
+          <circle
+            v-for="point in line.points"
+            :key="`${line.model.id}-hit-${point.bucketIndex}`"
+            data-chart-hit
+            :cx="point.x"
+            :cy="point.y"
+            r="10"
+            fill="transparent"
+            class="cursor-crosshair"
+            @mouseenter="setActive(line.model, point.bucketIndex)"
+          />
+        </g>
+
+        <!-- 图上批注：小号灰蓝字 + 细引线，不用说明卡 -->
+        <g data-annotation-group aria-hidden="true">
+          <g
+            v-for="annotation in annotations"
+            :key="`annotation-${annotation.key}`"
+            data-annotation
+            :data-annotation-key="annotation.key"
+          >
+            <line
+              :x1="annotation.x"
+              :y1="annotation.y"
+              :x2="annotation.textX + (annotation.anchor === 'start' ? -3 : 3)"
+              :y2="annotation.textY + 3"
+              stroke="var(--muted-foreground)"
+              stroke-width="0.8"
+              stroke-opacity="0.55"
+            />
+            <text
+              :x="annotation.textX"
+              :y="annotation.textY"
+              :text-anchor="annotation.anchor"
+              class="fill-muted-foreground"
+              font-size="11"
+              fill-opacity="0.9"
             >
-              {{ modeBadge(model) }}
+              {{ annotation.text }}
+            </text>
+          </g>
+        </g>
+
+        <!-- 线端标签：模型名（颜色=线色）+ 综合分；标签挤时用 1px 引线连回端点 -->
+        <g data-end-label-group>
+          <g
+            v-for="label in endLabels"
+            :key="`end-label-${label.model.id}`"
+            data-end-label
+            :data-model-id="label.model.id"
+            :data-label-y="label.labelY.toFixed(2)"
+            :class="['cursor-default', hideOnNarrow(label) ? 'end-label-extra' : '']"
+            @mouseenter="setActive(label.model)"
+          >
+            <line
+              v-if="Math.abs(label.labelY - label.pointY) > 1"
+              :x1="label.x"
+              :y1="label.pointY"
+              :x2="END_LABEL_X - 5"
+              :y2="label.labelY"
+              :stroke="label.color"
+              stroke-width="1"
+              stroke-opacity="0.55"
+            />
+            <text
+              :x="END_LABEL_X"
+              :y="label.labelY - 1"
+              :fill="label.color"
+              :font-weight="labelWeight(label.model)"
+              :font-size="isLocal(label.model) ? 13 : 12"
+              class="end-label-name"
+            >
+              {{ label.model.name }}
+            </text>
+            <text
+              :x="END_LABEL_X"
+              :y="label.labelY + 12"
+              class="end-label-sub fill-muted-foreground"
+              font-size="9"
+            >
+              {{ labelSubline(label.model) }}
+            </text>
+          </g>
+        </g>
+
+        <!-- 当前悬停节点的强调环 -->
+        <circle
+          v-if="activePoint"
+          :cx="activePoint.x"
+          :cy="activePoint.y"
+          r="5.5"
+          fill="none"
+          stroke="var(--foreground)"
+          stroke-width="1.5"
+          aria-hidden="true"
+        />
+      </svg>
+
+      <!-- tooltip（模型 / 档位 + n / 分档综合分 / 7 维明细） -->
+      <div
+        v-if="tooltip"
+        data-chart-tooltip
+        class="pointer-events-none absolute z-20 w-[210px] border border-border bg-popover px-2.5 py-2 shadow-sm"
+        :style="{ left: tooltip.left, top: tooltip.top, transform: tooltip.transform }"
+      >
+        <div class="flex items-center gap-1.5 text-[11px] font-medium text-foreground">
+          <span
+            class="inline-block size-2 shrink-0"
+            :style="{ backgroundColor: colorFor(tooltip.model) }"
+            aria-hidden="true"
+          />
+          <span class="truncate">{{ tooltip.model.name }}</span>
+          <span class="font-mono text-[9px] text-muted-foreground">
+            {{ modeBadge(tooltip.model) }}
+          </span>
+        </div>
+        <div class="mt-1 flex items-baseline justify-between gap-2 text-[10px] text-muted-foreground">
+          <span>{{ tooltip.bucket.label }} · n={{ tooltip.bucket.n }}</span>
+          <span class="font-mono">
+            难度 {{ tooltip.bucket.difficulty[0] }}–{{ tooltip.bucket.difficulty[1] }}
+          </span>
+        </div>
+        <div class="mt-1 font-mono text-[12px] text-foreground">
+          分档综合分
+          <span class="ml-1 text-sm">{{ tooltip.scoreText }}</span>
+          <span v-if="tooltip.clamped" class="ml-1 text-[10px] text-muted-foreground">▼</span>
+        </div>
+        <div class="mt-1.5 space-y-0.5 border-t border-border pt-1.5">
+          <div
+            v-for="dim in DIFFICULTY_DIMS"
+            :key="`tt-${dim.key}`"
+            class="flex items-baseline justify-between gap-2 text-[10px]"
+          >
+            <span class="text-muted-foreground">{{ dim.label }}</span>
+            <span class="font-mono text-foreground">
+              {{ fmtPct(tooltip.point.dims[dim.key]) }}
             </span>
-          </span>
-          <span class="truncate">{{ model.name }}</span>
-          <span class="font-mono text-[10px] text-muted-foreground">
-            {{ fmtPct(model.compositeScore) }}
-          </span>
-        </button>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-if="chartModels.length === 0"
+        class="absolute inset-0 flex items-center justify-center bg-card/70 text-[12px] text-muted-foreground"
+      >
+        当前筛选下没有可绘制的模型
       </div>
     </div>
+
+    <!-- 图下说明：数据口径与“别过度解读” -->
+    <p data-chart-note class="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+      {{ DIFFICULTY_NOTE }} 分档诊断为辅助视图，榜单主分见表格。
+    </p>
   </section>
 </template>
+
+<style scoped>
+@media (max-width: 899px) {
+  .end-label-extra {
+    display: none;
+  }
+}
+</style>
