@@ -25,10 +25,10 @@
     "state_consistency": "状态一致性"
   },
   "generatedFrom": "reports/v1.5/v3_only",
-  "note": "CI reflects the 60-pair sampling noise only. starlife-v3-wsv: dataset_spatial_v3 sample; other rows: dataset_spatial_v2 sample (v1.4).",
+  "note": "CI reflects the 60-pair sampling noise only. starlife-v1-wsv (v3 heads): dataset_spatial_v3 sample; other rows: dataset_spatial_v2 sample (v1.4).",
   "models": [
     {
-      "id": "starlife-v3-wsv",
+      "id": "starlife-v1-wsv",
       "family": "StarLife",
       "compositeScore": 95.21,
       "intervals": {

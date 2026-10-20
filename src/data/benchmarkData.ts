@@ -524,7 +524,7 @@ export const COMPOSITE_FORMULA: string =
  * v3/v1.4 sample split is always stated in the same words under the table.
  */
 export const MIXED_DATA_NOTE =
-  'starlife-v3-wsv is scored on a 60-pair sample from dataset_spatial_v3 (v3 heads); all other rows use the v1.4 60-pair sample from dataset_spatial_v2.';
+  'The starlife-v1-wsv (StarLife) row is scored with v3 heads on a 60-pair sample from dataset_spatial_v3; all other rows use the v1.4 60-pair sample from dataset_spatial_v2.';
 
 /** 生成时间的人读格式；不可解析则 null（UI 隐藏而不是写死日期）。 */
 export const GENERATED_AT_LABEL: string | null = (() => {

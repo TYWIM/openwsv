@@ -76,12 +76,12 @@
       ],
       "note": "总分依赖权重；这里用等权并公开逐维分数，任何人都能按自己的场景重算。"
     },
-    "mixedDataNote": "starlife-v3-wsv row is a 60-pair sample drawn from dataset_spatial_v3 (v3 heads, slot-geometry features); all other rows are the v1.4 60-pair sample from dataset_spatial_v2."
+    "mixedDataNote": "The starlife-v1-wsv (StarLife) row is scored with v3 heads on a 60-pair sample drawn from dataset_spatial_v3; all other rows are the v1.4 60-pair sample from dataset_spatial_v2."
   },
   "models": [
     {
-      "id": "starlife-v3-wsv",
-      "name": "starlife-v3-wsv",
+      "id": "starlife-v1-wsv",
+      "name": "starlife-v1-wsv",
       "family": "StarLife",
       "provider": "StarLife AI",
       "providerColor": "var(--color-starlife)",
