@@ -34,8 +34,11 @@ python -m starlife_eval leaderboard --run runs/v2g_real \
 - 榜单上方是 **横向综合分条形图**：卡片顶部 8 个分段按钮（`综合分` + 7 个分维度），
   默认展示综合分，切换后按该指标从高到低重排，柱子宽度 300ms 过渡；每行一个模型，
   行标签为模型名，条末端右侧标数值（1 位小数），某维度 `available: false` 时显示灰条 + `N/A`。
-  本地 `starlife-v1-wsv` 用高亮蓝加粗突出，其余 10 个统一低饱和蓝灰；不按家族上色，
-  hover 行只做高亮、不弹 tooltip。底部 0/25/50/75/100 浅灰网格，无上/右边框。
+  本地 `starlife-v1-wsv` 用其家族色（StarLife）不透明 + 数值加粗突出，其余 10 个用各自
+  家族色、整体 70% 透明度（同家族两根柱子同色）；不按指标切换颜色，hover 行升至不透明
+  并加浅底、不弹 tooltip。深色背景下对比度不足的家族色会
+  `color-mix(in oklab, <色> 75%, white)` 提亮。图下有 9 项非交互家族图例（圆点与柱体同色，
+  同家族标 `×N`）。底部 0/25/50/75/100 浅灰网格，无上/右边框。
   数据全部来自 `src/data/leaderboard.generated.json` 的 `compositeScore` 与 `composite.dims[]`。
   后端另有 `reports/v1.4/difficulty_curve.json` 诊断数据（按 GT 难度分档的趋势），**当前 UI 不展示**。
 - 数值口径见 `starlife_eval/ARCHITECTURE.md` §5.6：`score = 100 × event.macro_f1_common`、
