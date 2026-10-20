@@ -12,9 +12,10 @@
  */
 
 export const BENCHMARK_TITLE = 'openwsv';
-export const BENCHMARK_SUBTITLE = 'Two-frame spatial & relational reasoning for vision-language models';
+export const BENCHMARK_SUBTITLE =
+  'World-model grounding and world-state understanding for vision-language models';
 export const BENCHMARK_POSITIONING =
-  'Open to any vision-language model: given two frames plus a slot table, the benchmark tests whether a model can output the correct object changes, spatial relations and contact/support judgements, then assemble them into a structured world-state update. StarLife-1-WSV-Lite is just one entrant on the board (a local head), not the whole benchmark.';
+  'Open to any vision-language model: given two frames and a slot table, the benchmark tests whether a model can ground a scene change into a structured world-state update — object changes, spatial relations, contact/support judgements and the resulting event stream. This is a single-step grounding evaluation, not a full world-model evaluation: multi-step rollout, action-conditioned dynamics and planning are out of scope for v1. StarLife-1-WSV-Lite is one entrant on the board (a local head), not the whole benchmark.';
 
 export interface TaskExample {
   /** 与 starlife_eval 的 head 名称对齐：change / relation / rel_pos / attrs */

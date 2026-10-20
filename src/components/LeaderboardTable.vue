@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 import {
   COMPOSITE_DIM_GUIDE,
   COMPOSITE_FORMULA,
+  MIXED_DATA_NOTE,
   NA,
   fmtLatency,
   fmtMetricValue,
@@ -606,6 +607,13 @@ const metricGroups = (model: ModelResult): MetricGroup[] => {
         {{ allModels.length === 0 ? 'No evaluation results yet: leaderboard.generated.json has not been generated or is empty.' : 'No models match the current filters.' }}
       </div>
     </div>
+
+    <p
+      data-mixed-data-note
+      class="border-t border-border/40 pt-3 text-[11px] leading-relaxed text-muted-foreground"
+    >
+      {{ MIXED_DATA_NOTE }}
+    </p>
 
     <p class="text-[12px] leading-relaxed text-muted-foreground">
       Composite score = {{ COMPOSITE_FORMULA }} 7 dimensions: Change detection top-1, Change balance
