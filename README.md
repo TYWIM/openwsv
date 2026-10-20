@@ -1,121 +1,197 @@
-# OpenWSV - BenchMark
+# 空间理解与关系推理基准 — Benchmark Frontend
 
-> **Open World State Verification Benchmark for Multimodal AI**  
-> 专为 **具身世界大模型** 体系深度定制的前沿多模态世界状态验证、3D 空间拓扑与物理因果评测平台。  
-> 开发者：**StarLife AI**（西安花濑科技）
+**Spatial & Relational Understanding Benchmark** 的前端（Vue 3 + Vite 6 + Tailwind CSS 4）。
+这不是"某个模型的榜"，而是一个**通用模型的空间关系理解小切面基准**：
 
-![Vue 3](https://img.shields.io/badge/Vue-3.5-brightgreen.svg)
-![Vite](https://img.shields.io/badge/Vite-6.x-blue.svg)
-![TailwindCSS](https://img.shields.io/badge/TailwindCSS-v4.0-38bdf8.svg)
-![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)
-![Tests](https://img.shields.io/badge/Tests-Passing-success.svg)
+> 给定两帧画面 + 槽位表，测的是任何视觉语言模型能否输出正确的**变化、空间关系、接触支撑**，
+> 并把它们组装成**结构化的世界状态更新**。任何能输出 changes / relations 的 VLM 都能提交
+> （零样本或专用头均可）。StarLife-1-WSV-Lite 只是榜单里的一个参赛条目（本地头），
+> 不是这个基准的全部。
 
----
+本目录是上游 `openwsv` 仓库 UI 的派生版本：只复用其页面结构与视觉样式，
+**不包含任何 mock 数据或 demo 评测后端**。
 
-## 🎯 基准评测定位与 StarLife-1-WSV 核心架构契合
+## 数据来源（唯一）
 
-OpenWSV 基准评测专门测试大模型（多模态 MLLM）在理解**物理世界状态（World State）**与**空间拓扑关系（Spatial Topology）**上的真实能力，针对传统 2D VQA 评测无法区分多模态大模型“视觉猜测”与“真实物理世界感知”的痛点，结合 StarLife 路演核心技术体系构建：
+页面上的所有评测结果来自：
 
-1. **两阶段级联沉降门控评测（Two-Stage Cascaded Settlement Gating）**：
-   - **Stage 0 运动沉降状态机（FSM）**：评测模型在快速运动模糊中的状态收敛抑制能力；
-   - **Stage 1 局部 SSIM 结构方差门控**：评测过滤阴影扰动与光照渐变的能力；
-   - **核心指标**：验证模型能否达到 **>65% 的 VLM 缓存命中率** 与 100% 物理跃迁召回率。
-2. **纯关键字空间拓扑判别头（Pure-Keyword Spatial Topology Head）**：
-   - 评测物体间的排他物理关系：`ON`（重力支撑）、`INSIDE`（容器容纳）、`OCCLUDES`（视线遮挡）、`PROXIMATE`（空间邻近）；
-   - **物理互斥约束自动闭合**：验证“放入盒内”是否自动切断旧桌面的支撑关系。
-3. **单写者事件溯源世界引擎（Single-Writer Event-Sourcing WorldStore）**：
-   - 验证四类原子事件流完整性：`APPEARED` → `MOVED` → `RELATION_CHANGED` → `DISAPPEARED`；
-   - **时态世界图（Time-Travel State Querying）**：评测在任意历史时刻 `T` 恢复场景无错快照的能力（如 180° 相机旋转后对被遮挡物体的坐标恒常性追踪）。
-4. **具身物理可达性与防碰撞流形（6-DoF Embodied Affordance & PhysX）**：
-   - 通过确定性射线投射与包围盒扫掠，评测机械臂/机器狗末端轨迹防碰撞及重心平衡静态稳定判别。
-5. **标准 MCP 协议输出（Model Context Protocol）**：
-   - 验证标准 Tool Call 接口的毫秒级时序响应与格式一致性。
-
----
-
-## 🧪 评测管线代码架构 (`openwsv_eval/`)
-
-在项目根目录构建了完整的原生 Python 评测工具包：
-
-```text
-E:\Project\OepnWSV_BenchMark\
-├── run_eval.py                         # 快速评测执行入口
-├── openwsv_eval/                        # 评测管线核心包
-│   ├── cli.py                          # 命令行界面 (CLI)
-│   ├── core/
-│   │   ├── types.py                    # 实体、3D BBox、拓扑边、原子事件、门控遥测类型定义
-│   │   └── task.py                     # 场景相机参数、RGB-D 帧数据与判题契约 Schema
-│   ├── dataset/
-│   │   └── loader.py                   # 4 种模态 (RGB-D, Multi-view, Video, Pointcloud) 场景加载器
-│   ├── models/
-│   │   ├── base.py                     # 多模态模型抽象基类接口
-│   │   ├── starlife.py                 # StarLife-1-WSV 与 StarLife-1-WSV-Lite 专用世界模型适配器
-│   │   └── baselines.py                # Gemini 2.0, GPT-5 Omni, Claude 3.5 等基线模型适配器
-│   ├── verifiers/
-│   │   ├── topology_verifier.py        # 空间拓扑图、DAG 无环性与物理互斥约束确定性判题器
-│   │   ├── temporal_verifier.py        # 时序单调性、事件生命周期与时间旅行状态重构判题器
-│   │   ├── affordance_verifier.py      # 3D IoU、6-DoF 机械臂扫掠防碰撞与重心平衡判题器
-│   │   └── gating_verifier.py          # 两阶段沉降门控缓存复用率与跃迁召回率判题器
-│   ├── runner/
-│   │   └── executor.py                 # 多线程高并发场景执行器与指标归纳引擎
-│   ├── report/
-│   │   └── leaderboard_sync.py         # 终端高密度仪表盘输出与 JSON 导出
-│   └── tests/
-│       └── test_starlife_pipeline.py   # 单元与集成测试套件 (100% 测试通过)
+```
+src/data/leaderboard.generated.json
 ```
 
----
-
-## ⚡ 运行评测流程
-
-### 1. 运行单元与集成测试套件
-```bash
-python -m unittest openwsv_eval.tests.test_starlife_pipeline
-```
-
-### 2. 评测 StarLife-1-WSV 旗舰世界模型
-```bash
-python run_eval.py run --model starlife-1-wsv
-```
-
-### 3. 评测 StarLife-1-WSV-Lite 端侧轻量版（适配树莓派/Jetson等专利外设硬件）
-```bash
-python run_eval.py run --model starlife-1-wsv-lite
-```
-
-### 4. 横向多模型对比评测（StarLife vs Gemini 2.0 vs GPT-5 Omni）
-```bash
-python run_eval.py compare --models starlife-1-wsv,starlife-1-wsv-lite,gemini-2.0-pro,gpt-5-omni
-```
-
-运行后将打印类似如下的终端高密度技术摘要，并自动导出评测数据至 `openwsv_eval_result.json`：
-```text
-==============================================================================
-  OpenWSV Multi-Model Comparison Matrix
-==============================================================================
-  Model                  | Score      | Topo F1    | Cache Hit  | Latency  | Cost  
-  --------------------------------------------------------------------------
-  starlife-1-wsv         | 84.8% ±2.2 | 89.6    % | 70.0    % | 320.0 ms | $0.42
-  starlife-1-wsv-lite    | 76.4% ±2.6 | 80.2    % | 70.0    % | 120.0 ms | $0.15
-  gemini-2.0-pro         | 81.4% ±2.4 | 85.2    % | 0.0     % | 1250.0ms | $3.20
-  gpt-5-omni             | 79.8% ±2.6 | 84.1    % | 0.0     % | 1480.0ms | $4.80
-==============================================================================
-```
-
----
-
-## 🌐 启动 Leaderboard 网页端
+该文件由 `starlife_eval`（本仓库 `starlife_eval/report/leaderboard.py`）从真实运行产物生成：
 
 ```bash
-cd E:\Project\OepnWSV_BenchMark
-
-# 安装依赖（若未安装）
-npm install
-
-# 启动开发服务器
-npm run dev
-
-# 生产环境构建
-npm run build
+python -m starlife_eval leaderboard --run runs/v2g_real \
+  --out third_party/openwsv/src/data/leaderboard.generated.json
 ```
-在浏览器打开 `http://localhost:5173` 即可查看 StarLife-1-WSV 位于榜首及 Pareto 散点图最右上角（Most Efficient）的完整评测呈现！
+
+- 前端**不调用任何接口**，只 import 这个静态 JSON；页面刷新即可看到新结果。
+- **榜单主分是 `compositeScore`（7 维等权综合分，0–100）**，按它排序与显示；
+  `score`（可比事件分）等旧字段**保留**为展开明细，没有删除。
+  综合分口径来自 `meta.composite`（等权、缺项自动从分母剔除），见下节契约。
+- 页面展示综合分、7 维分解与每个事件的端到端延迟（含特征抽取 / API 往返；云端受网络与输出长度影响）。
+- 榜单上方是 **横向综合分条形图**：卡片顶部 8 个分段按钮（`综合分` + 7 个分维度），
+  默认展示综合分，切换后按该指标从高到低重排，柱子宽度 300ms 过渡；每行一个模型，
+  行标签为模型名，条末端右侧标数值（1 位小数），某维度 `available: false` 时显示灰条 + `N/A`。
+  本地 `starlife-v1-wsv` 用其家族色（StarLife）不透明 + 数值加粗突出，其余 10 个用各自
+  家族色、整体 70% 透明度（同家族两根柱子同色）；不按指标切换颜色，hover 行升至不透明
+  并加浅底、不弹 tooltip。深色背景下对比度不足的家族色会
+  `color-mix(in oklab, <色> 75%, white)` 提亮。图下有 9 项非交互家族图例（圆点与柱体同色，
+  同家族标 `×N`）。柱末端另有 95% bootstrap 浮动区间（深色点估计竖线 + 细灰线/两端竖帽，
+  数据来自 `src/data/confidence_intervals.json` 的 pair-level bootstrap），数值标签后附区间小字，
+  图下有固定口径说明；区间重叠不代表名次确定。底部 0/25/50/75/100 浅灰网格，无上/右边框。
+  数据全部来自 `src/data/leaderboard.generated.json` 的 `compositeScore` 与 `composite.dims[]`。
+  后端另有 `reports/v1.4/difficulty_curve.json` 诊断数据（按 GT 难度分档的趋势），**当前 UI 不展示**。
+- 数值口径见 `starlife_eval/ARCHITECTURE.md` §5.6：`score = 100 × event.macro_f1_common`、
+  `topologyF1 = 100 × relation_type_acc`、`affordanceAcc = 100 × attrs_acc`、
+  `stateTransitionAcc = 100 × change_top1`。
+- **null 语义**：任何数值字段为 `null` 表示"该维度没有真实测量值"，前端渲染为 `N/A`，
+  条形图用灰条占位，绝不显示 0 或把缺项当 0 分。
+- `leaderboard.generated.json` 缺失或 `models: []` 时，页面显示"尚无评测结果"空态，不白屏。
+
+> `src/data/leaderboard.generated.json` 里若出现 `_note: "SAMPLE for dev only…"`，
+> 说明它还是本地联调用的样例（数值为占位），**必须**被后端真实产物覆盖后再发布。
+
+静态文案（基准标题/副题/一句话定位、4 个判别任务、评测协议、7 维综合分的人话说明、
+"世界模型六层"定位）在 `src/data/benchmarkContent.ts`，不是评测结果，也不需要后端生成。
+
+## 数据契约（v4，供后端对齐，示例取自真实产物）
+
+```jsonc
+{
+  "schemaVersion": 4,
+  "meta": {
+    "benchmark": "空间理解与关系推理基准（Spatial & Relational Understanding Benchmark）",
+    "benchmarkShort": "Spatial & Relational Understanding Benchmark",
+    "split": "test",
+    "nPairs": 60, "nTestPairs": 200,
+    "dataset": "dataset_spatial_v2", "checkpoints": "checkpoints/pilot_v2g",
+    "sampleSeed": 20261020, "generatedAt": "2026-10-20T16:15:35+00:00",
+    "sourceRun": "/tmp/sl_runs/full_v13",
+    "artifacts": { "features_sha256_16": "…", "manifest_sha256_16": "…", "cloud_cache_sha256_16": "…" },
+    "telemetry": { "tasks": 5, "scenes": null, "pairs": 60, "testPairs": 200,
+                   "slots": 5830, "relations": 2575, "models": 6 },
+    "composite": {
+      "name": "综合能力分", "method": "equal-weight",
+      "formula": "7 个维度（0-100）等权平均；缺项自动从分母剔除，不当 0 分",
+      "n_dims": 7,
+      "dims": [
+        { "key": "change_top1", "group": "变化识别", "label": "变化识别 top1",
+          "source": "pair_protocol.change_top1" },
+        { "key": "change_balance", "group": "变化平衡性", "label": "变化平衡性 (macroF1)",
+          "source": "pair_protocol.change_macro_f1" },
+        { "key": "relation_type", "group": "关系类型", "label": "关系类型准确率",
+          "source": "pair_protocol.relation_type_acc" },
+        { "key": "rel_pos", "group": "空间方位", "label": "空间方位准确率",
+          "source": "pair_protocol.rel_pos_acc" },
+        { "key": "attrs", "group": "接触支撑", "label": "接触/支撑准确率",
+          "source": "pair_protocol.attrs_acc" },
+        { "key": "event_f1", "group": "事件级 F1", "label": "事件级 F1",
+          "source": "event_metrics.macro_f1_common" },
+        { "key": "state_consistency", "group": "世界状态一致性", "label": "世界状态一致性",
+          "source": "state_replay.state_acc_common" }
+      ],
+      "note": "总分依赖权重；这里用等权并公开逐维分数，任何人都能按自己的场景重算。"
+    }
+  },
+  "models": [{
+    "id": "starlife-1-wsv-lite-v2", "name": "starlife-1-wsv-lite-v2",
+    "family": "StarLife", "provider": "StarLife AI", "mode": "LOCAL-HEADS",
+    "providerColor": "var(--color-starlife)",
+    "version": "v1.1", "isBest": true, "confidence": null,
+    "compositeScore": 83.7,
+    "composite": {
+      "method": "equal-weight",
+      "weights": [0.142857, 0.142857, 0.142857, 0.142857, 0.142857, 0.142857, 0.142857],
+      "available": 7, "total": 7,
+      "dims": [
+        { "key": "change_top1", "group": "变化识别", "label": "变化识别 top1",
+          "value": 92.8, "source": "pair_protocol.change_top1", "available": true },
+        { "key": "change_balance", "group": "变化平衡性", "label": "变化平衡性 (macroF1)",
+          "value": 66.3, "source": "pair_protocol.change_macro_f1", "available": true },
+        { "key": "relation_type", "group": "关系类型", "label": "关系类型准确率",
+          "value": 90.9, "source": "pair_protocol.relation_type_acc", "available": true },
+        { "key": "rel_pos", "group": "空间方位", "label": "空间方位准确率",
+          "value": 71.2, "source": "pair_protocol.rel_pos_acc", "available": true },
+        { "key": "attrs", "group": "接触支撑", "label": "接触/支撑准确率",
+          "value": 97.2, "source": "pair_protocol.attrs_acc", "available": true },
+        { "key": "event_f1", "group": "事件级 F1", "label": "事件级 F1",
+          "value": 75.4, "source": "event_metrics.macro_f1_common", "available": true },
+        { "key": "state_consistency", "group": "世界状态一致性", "label": "世界状态一致性",
+          "value": 92.4, "source": "state_replay.state_acc_common", "available": true }
+      ]
+    },
+    "score": 75.4, "topologyF1": 90.9, "affordanceAcc": 97.2, "stateTransitionAcc": 92.8,
+    "latency": 1716.8,
+    "na": {},
+    "metrics": {
+      "head": { "change_top1": 0.936, "change_macro_f1": 0.723,
+                "relation_top1": 0.793, "relation_macro_f1": 0.786,
+                "rel_pos_top1": 0.688, "rel_pos_macro_f1": 0.538,
+                "attrs_contact_f1": 0.888, "attrs_support_f1": 0.869, "attrs": 0.879 },
+      "pair": { "change_top1": 0.928, "change_macro_f1": 0.6628,
+                "relation_type_acc": 0.9091, "rel_pos_acc": 0.7125, "attrs_acc": 0.9719 },
+      "event": { "macro_f1": 0.5695, "macro_f1_common": 0.7542,
+                 "common_kinds": ["StateChanged", "RelationAdded"],
+                 "matched_total": 197,
+                 "available_kinds": ["EntityCreated", "StateChanged", "RelationAdded"] },
+      "state": 0.9334
+    }
+  }]
+}
+```
+
+- `models[]` 行字段：`id` / `name` / `family` / `provider` / `mode` / `version` / `isBest` /
+  `confidence` / `compositeScore` / `composite` / `score` / `topologyF1` / `affordanceAcc` /
+  `stateTransitionAcc` / `latency` / `na` / `metrics`。
+- `metrics.head` 的键为 change / relation / rel_pos / attrs 相关指标。
+- `compositeScore` 是**榜单主分**（0–100）；`composite.dims` 固定 7 项（`key` 为
+  `change_top1`/`change_balance`/`relation_type`/`rel_pos`/`attrs`/`event_f1`/`state_consistency`），
+  `value` 已 ×100、`available=false` 或缺项时自动从分母剔除。前端展开行渲染 7 维小条 +
+  `meta.composite.formula` 一行字 + `weights` 来源说明（等权 1/7，不预设哪个维度更重要），
+  并按 `key` 匹配 `benchmarkContent.ts` 里"一句话 + 怎么看"的人话说明。
+- **参赛方式**：`mode` 为 `LOCAL-HEADS` 的行在前端显示为 `local-heads`（有监督专用头），
+  `ZERO-SHOT` 显示为 `zero-shot`（零样本通用模型）。页面明确提示**两类不可直接等量齐观**
+  （专用头见过训练集、零样本没有），详见 reliability 报告。
+- **综合分依赖权重（已知性质）**：换一组权重，云端模型的名次会互换，但本地行始终第一；
+  详见 reliability 报告。前两名综合分差 0.1 分时约等于打平（差值由前端按数据实时计算，
+  不手抄）；行内只有 `isBest` 徽标。
+- 7 维中的两个口径提醒放在展开区 tooltip：`rel_pos` 只统计**关系判定正确后**的方位；
+  `state_consistency` **不含实体类别维度**。
+- `score`/`topologyF1`/`affordanceAcc`/`stateTransitionAcc` 是 **0–100 的百分数**（§5.6 映射），
+  现在作为**明细**保留；`metrics.*` 是 0–1 比例，UI 展开明细时显示为百分比。
+  UI 的旧字段/明细数值全部直接读该 JSON，不手抄。
+- 数值字段允许 `null`；`null` 在 UI 渲染为 `N/A`，条形图用灰条占位。
+- `metrics` 可选，表格行可展开查看明细；缺失（或某分组为 `null`）时对应分组不显示。
+  注意 `metrics.state` 是**数字**（state_acc），`head`/`pair`/`event` 是对象。
+- `version`/`isBest` 用于筛选与强调；`confidence` 目前恒为 `null`（未做 95% bootstrap），UI 隐藏。
+- `na` 给字段级 N/A 原因（例如云端零样本没有头级概率分布）；UI 在展开行里按可读标签显示。
+- `meta.telemetry` 只用于首页计数，取不到的键写 `null`（UI 隐藏该项，不写死）：
+  `pairs` = 每模型实际评测的对数（60，榜单可比范围），`testPairs` = test split 总对数（数据集规模）。
+
+## 开发 / 构建
+
+```bash
+# 依赖（二选一）
+pnpm install
+# 或（仓库自带 package-lock.json）
+npm ci
+
+# 生产构建
+pnpm build      # 等价于 vite build / npm run build
+
+# 本地预览构建产物（可选）
+pnpm preview
+```
+
+构建产物在 `dist/`。仓库不提供常驻服务；生产环境用任意静态服务器托管 `dist/` 即可。
+
+## 与上游的关系
+
+- 上游仓库：<https://github.com/TYWIM/openwsv>（UI 来源，clone commit 见本目录 git 历史）。
+- 已删除的上游 demo 后端（Python 评测包与评测 runner 脚本）。它们全是 mock
+  （编造分数、假 leaderboard、无 3D 数据跑 affordance/gating 判题），不再属于本系统。
+  真实后端是 `starlife_eval`。
+- License：截至本目录 clone 时，上游仓库**未附带 LICENSE 文件**。本派生前端仅用于
+  StarLife 内部评测系统；若上游后续补充许可证，以该上游许可证为准。

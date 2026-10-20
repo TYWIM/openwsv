@@ -1,744 +1,610 @@
+/**
+ * 前端数据层（契约见 starlife_eval/ARCHITECTURE.md §5.6 / §8）。
+ *
+ * 唯一的"结果数据"来源是 `./leaderboard.generated.json`，由
+ * starlife_eval/report/leaderboard.py 生成（真实评测产物，不是 mock）。
+ * 所有数值字段允许 null：null 表示该维度**没有真实测量值**，
+ * 组件必须渲染为 N/A（详见下方 fmt* 工具），禁止用 0 / 占位值替代。
+ *
+ * 本文件不含任何写死的评测结果；静态方法论文案在 ./benchmarkContent.ts。
+ */
+
+import {
+  BENCHMARK_POSITIONING,
+  BENCHMARK_SUBTITLE,
+  BENCHMARK_TITLE,
+  COMPOSITE_DIM_GUIDE,
+  COMPOSITE_DIM_ORDER,
+  COMPOSITE_FORMULA_FALLBACK,
+  METHODOLOGY_POINTS,
+  TASK_EXAMPLES,
+  WORLD_MODEL_LAYERS,
+  WORLD_MODEL_SCOPE,
+  type CompositeDimGuide,
+  type CompositeDimKey,
+  type MethodologyPoint,
+  type TaskExample,
+  type WorldModelLayer,
+} from './benchmarkContent';
+
+export {
+  BENCHMARK_POSITIONING,
+  BENCHMARK_SUBTITLE,
+  BENCHMARK_TITLE,
+  COMPOSITE_DIM_GUIDE,
+  COMPOSITE_DIM_ORDER,
+  COMPOSITE_FORMULA_FALLBACK,
+  METHODOLOGY_POINTS,
+  TASK_EXAMPLES,
+  WORLD_MODEL_LAYERS,
+  WORLD_MODEL_SCOPE,
+};
+export type { CompositeDimGuide, CompositeDimKey, MethodologyPoint, TaskExample, WorldModelLayer };
+
+// ---------------------------------------------------------------- model 数据
+
+export type ModelFamily =
+  | 'StarLife'
+  | 'Google'
+  | 'OpenAI'
+  | 'Anthropic'
+  | 'Qwen'
+  | 'DeepSeek'
+  | 'Mistral'
+  | 'Meta'
+  | 'Xiaomi'
+  | 'MiniMax'
+  | 'Zhipu'
+  | 'ByteDance'
+  | 'Tencent'
+  | 'Community';
+
+export type MetricSectionValue = number | string | null | Array<number | string>;
+
+export interface ModelMetrics {
+  head?: Record<string, MetricSectionValue>;
+  pair?: Record<string, MetricSectionValue>;
+  event?: Record<string, MetricSectionValue>;
+  state?: Record<string, MetricSectionValue>;
+  [section: string]: Record<string, MetricSectionValue> | undefined;
+}
+
 export interface ModelResult {
   id: string;
   name: string;
-  family: 'StarLife' | 'Google' | 'OpenAI' | 'Anthropic' | 'Qwen' | 'DeepSeek' | 'Mistral' | 'Meta' | 'Community';
-  provider: 'StarLife AI' | 'Google' | 'Anthropic' | 'OpenAI' | 'Qwen' | 'DeepSeek' | 'Mistral' | 'Meta' | 'Community';
+  family: ModelFamily;
+  provider: string;
   providerColor: string;
-  mode: string; // e.g. 'XHIGH', 'HIGH', 'MEDIUM', 'MULTI-VIEW'
-  score: number; // OpenWSV Pass@1
-  confidence: number; // ± error margin
-  topologyF1: number;
-  affordanceAcc: number;
-  stateTransitionAcc: number;
-  cost: number; // $ per 100 tasks
-  tokens: string; // e.g. "36k"
-  tokenNum: number;
-  latency: number; // ms
-  version: 'v1.1' | 'v1.0';
+  mode: string;
+  /**
+   * 事件级 macro-F1 × 100（ARCHITECTURE §5.6），作为**明细**保留。
+   * null = 事件级指标不可用。
+   */
+  score: number | null;
+  /** 榜单主分：7 维等权综合分（0–100）；null = 后端未提供综合分。 */
+  compositeScore: number | null;
+  /** 综合分的构成（7 个维度、权重、公式）；null = 旧版数据没有该段。 */
+  composite: Composite | null;
+  /** 95% bootstrap CI；当前没有测，恒为 null，UI 隐藏。 */
+  confidence: number | null;
+  /** 100 × pair_protocol.relation_type_acc */
+  topologyF1: number | null;
+  /** 100 × pair_protocol.attrs_acc */
+  affordanceAcc: number | null;
+  /** 100 × pair_protocol.change_top1 */
+  stateTransitionAcc: number | null;
+  /** 实测毫秒延迟（每事件端到端，含特征抽取 / API 往返）。唯一的运行时指标。 */
+  latency: number | null;
+  /** 明细指标（表格行可展开）；后端未提供则为 null。 */
+  metrics: ModelMetrics | null;
+  /** 评测版本标签。真实数据当前统一为 v1.1；保留字段用于后续对照。 */
+  version: string;
+  /** 同 family 内综合分最高的模型（后端提供；缺失时前端按综合分推导）。 */
   isBest: boolean;
-  date: string;
+  /** 字段级 N/A 原因（只保留与本基准相关的口径说明，例如 head-level 未测）。 */
+  na: Record<string, string>;
+  /** 后端附带的说明文案（已英文化；当前数据为空）。 */
+  notes: Record<string, string>;
 }
 
-export interface TaskExample {
-  id: string;
-  title: string;
-  description: string;
-  repoOrDomain: string;
-  modality: 'RGB-D' | 'Multi-view' | 'Video Stream' | '3D Pointcloud';
-  sceneType: string;
-  difficulty: 'Standard' | 'Hard' | 'Extreme';
-  groundTruthType: string;
-  keyVerification: string;
-  samplePrompt: string;
+/** 综合分的一个维度（数值已经 ×100，0–100）。 */
+export interface CompositeDim {
+  key: CompositeDimKey;
+  /** 中文短语：变化识别 / 变化平衡性 / 关系类型 / 空间方位 / 接触支撑 / 事件级F1 / 世界状态一致性 */
+  group: string;
+  /** 表格列头用的短名 */
+  label: string;
+  value: number;
+  /** 口径出处，如 "pair_protocol.change_top1" */
+  source: string;
+  available: boolean;
 }
 
-export const TELEMETRY_STATS = [
-  { label: 'tasks', value: '142' },
-  { label: 'scenes', value: '86' },
-  { label: 'modalities', value: '4' },
-  { label: 'models', value: '24' },
-];
+export interface Composite {
+  method: string;
+  weights: number[];
+  available: number;
+  total: number;
+  dims: CompositeDim[];
+}
 
-export const BENCHMARK_MODELS: ModelResult[] = [
-  // --- StarLife AI World Model Family (Flagship) ---
-  {
-    id: 'starlife-1-wsv',
-    name: 'starlife-1-wsv',
-    family: 'StarLife',
-    provider: 'StarLife AI',
-    providerColor: 'var(--color-starlife)',
-    mode: 'XHIGH',
-    score: 84.8,
-    confidence: 2.2,
-    topologyF1: 89.6,
-    affordanceAcc: 83.5,
-    stateTransitionAcc: 86.2,
-    cost: 0.42,
-    tokens: '28k',
-    tokenNum: 28,
-    latency: 320,
-    version: 'v1.1',
-    isBest: true,
-    date: '2026-10-20',
-  },
-  {
-    id: 'starlife-1-wsv-lite',
-    name: 'starlife-1-wsv-lite',
-    family: 'StarLife',
-    provider: 'StarLife AI',
-    providerColor: 'var(--color-starlife)',
-    mode: 'EDGE-LITE',
-    score: 76.4,
-    confidence: 2.6,
-    topologyF1: 80.2,
-    affordanceAcc: 74.8,
-    stateTransitionAcc: 75.9,
-    cost: 0.15,
-    tokens: '14k',
-    tokenNum: 14,
-    latency: 120,
-    version: 'v1.1',
-    isBest: false,
-    date: '2026-10-20',
-  },
+// --------------------------------------------------------------- 榜单元信息
 
-  // --- Google Gemini Family ---
-  {
-    id: 'gemini-2-flash-pro',
-    name: 'gemini-2.0-pro',
-    family: 'Google',
-    provider: 'Google',
-    providerColor: 'var(--color-gemini)',
-    mode: 'XHIGH',
-    score: 81.4,
-    confidence: 2.4,
-    topologyF1: 85.2,
-    affordanceAcc: 79.8,
-    stateTransitionAcc: 79.2,
-    cost: 3.20,
-    tokens: '44k',
-    tokenNum: 44,
-    latency: 1250,
-    version: 'v1.1',
-    isBest: true,
-    date: '2026-10-18',
-  },
-  {
-    id: 'gemini-2-flash',
-    name: 'gemini-2.0-flash',
-    family: 'Google',
-    provider: 'Google',
-    providerColor: 'var(--color-gemini)',
-    mode: 'HIGH',
-    score: 78.5,
-    confidence: 2.7,
-    topologyF1: 82.0,
-    affordanceAcc: 76.5,
-    stateTransitionAcc: 75.8,
-    cost: 1.20,
-    tokens: '32k',
-    tokenNum: 32,
-    latency: 680,
-    version: 'v1.1',
-    isBest: false,
-    date: '2026-10-10',
-  },
-  {
-    id: 'gemini-1-5-pro',
-    name: 'gemini-1.5-pro',
-    family: 'Google',
-    provider: 'Google',
-    providerColor: 'var(--color-gemini)',
-    mode: 'MEDIUM',
-    score: 69.9,
-    confidence: 3.4,
-    topologyF1: 73.5,
-    affordanceAcc: 68.0,
-    stateTransitionAcc: 68.2,
-    cost: 2.10,
-    tokens: '58k',
-    tokenNum: 58,
-    latency: 1650,
-    version: 'v1.1',
-    isBest: false,
-    date: '2026-08-20',
-  },
-  {
-    id: 'gemini-1-5-flash',
-    name: 'gemini-1.5-flash',
-    family: 'Google',
-    provider: 'Google',
-    providerColor: 'var(--color-gemini)',
-    mode: 'BASE',
-    score: 54.2,
-    confidence: 4.2,
-    topologyF1: 58.1,
-    affordanceAcc: 52.4,
-    stateTransitionAcc: 51.0,
-    cost: 0.35,
-    tokens: '22k',
-    tokenNum: 22,
-    latency: 420,
-    version: 'v1.1',
-    isBest: false,
-    date: '2026-07-15',
-  },
+export interface LeaderboardMeta {
+  benchmark: string;
+  split: string | null;
+  nPairs: number | null;
+  nTestPairs: number | null;
+  dataset: string | null;
+  checkpoints: string | null;
+  sampleSeed: number | null;
+  generatedAt: string | null;
+  sourceRun: string | null;
+  /** 综合分口径（后端 meta.composite）；旧版数据为 null。 */
+  composite: CompositeMeta | null;
+}
 
-  // --- OpenAI GPT Family ---
-  {
-    id: 'gpt-5-omni',
-    name: 'gpt-5-omni',
-    family: 'OpenAI',
-    provider: 'OpenAI',
-    providerColor: 'var(--color-openai)',
-    mode: 'XHIGH',
-    score: 79.8,
-    confidence: 2.6,
-    topologyF1: 84.1,
-    affordanceAcc: 78.3,
-    stateTransitionAcc: 77.0,
-    cost: 4.80,
-    tokens: '52k',
-    tokenNum: 52,
-    latency: 1480,
-    version: 'v1.1',
-    isBest: true,
-    date: '2026-10-15',
-  },
-  {
-    id: 'gpt-4o-2024-11',
-    name: 'gpt-4o',
-    family: 'OpenAI',
-    provider: 'OpenAI',
-    providerColor: 'var(--color-openai)',
-    mode: 'HIGH',
-    score: 71.6,
-    confidence: 3.2,
-    topologyF1: 74.8,
-    affordanceAcc: 70.2,
-    stateTransitionAcc: 69.8,
-    cost: 2.75,
-    tokens: '40k',
-    tokenNum: 40,
-    latency: 1120,
-    version: 'v1.1',
-    isBest: false,
-    date: '2026-09-15',
-  },
-  {
-    id: 'gpt-4o-mini',
-    name: 'gpt-4o-mini',
-    family: 'OpenAI',
-    provider: 'OpenAI',
-    providerColor: 'var(--color-openai)',
-    mode: 'MEDIUM',
-    score: 56.4,
-    confidence: 4.0,
-    topologyF1: 60.5,
-    affordanceAcc: 55.1,
-    stateTransitionAcc: 54.3,
-    cost: 0.60,
-    tokens: '24k',
-    tokenNum: 24,
-    latency: 510,
-    version: 'v1.1',
-    isBest: false,
-    date: '2026-08-01',
-  },
-  {
-    id: 'gpt-4-turbo',
-    name: 'gpt-4-turbo',
-    family: 'OpenAI',
-    provider: 'OpenAI',
-    providerColor: 'var(--color-openai)',
-    mode: 'BASE',
-    score: 48.0,
-    confidence: 4.5,
-    topologyF1: 52.0,
-    affordanceAcc: 46.8,
-    stateTransitionAcc: 45.2,
-    cost: 5.20,
-    tokens: '38k',
-    tokenNum: 38,
-    latency: 1720,
-    version: 'v1.1',
-    isBest: false,
-    date: '2026-05-10',
-  },
+export interface CompositeMeta {
+  name: string;
+  method: string;
+  dims: number;
+  formula: string;
+  /** 后端对"综合分依赖权重"的说明（meta.composite.note）。 */
+  note: string;
+}
 
-  // --- Anthropic Claude Family ---
-  {
-    id: 'claude-3-5-sonnet',
-    name: 'claude-3.5-sonnet',
-    family: 'Anthropic',
-    provider: 'Anthropic',
-    providerColor: 'var(--color-anthropic)',
-    mode: 'HIGH',
-    score: 77.2,
-    confidence: 2.8,
-    topologyF1: 81.6,
-    affordanceAcc: 75.9,
-    stateTransitionAcc: 74.1,
-    cost: 3.90,
-    tokens: '38k',
-    tokenNum: 38,
-    latency: 1390,
-    version: 'v1.1',
-    isBest: true,
-    date: '2026-09-30',
-  },
-  {
-    id: 'claude-3-5-haiku',
-    name: 'claude-3.5-haiku',
-    family: 'Anthropic',
-    provider: 'Anthropic',
-    providerColor: 'var(--color-anthropic)',
-    mode: 'MEDIUM',
-    score: 65.1,
-    confidence: 3.6,
-    topologyF1: 69.4,
-    affordanceAcc: 63.8,
-    stateTransitionAcc: 62.5,
-    cost: 1.10,
-    tokens: '26k',
-    tokenNum: 26,
-    latency: 590,
-    version: 'v1.1',
-    isBest: false,
-    date: '2026-09-12',
-  },
-  {
-    id: 'claude-3-opus',
-    name: 'claude-3-opus',
-    family: 'Anthropic',
-    provider: 'Anthropic',
-    providerColor: 'var(--color-anthropic)',
-    mode: 'MAX',
-    score: 61.8,
-    confidence: 3.8,
-    topologyF1: 66.2,
-    affordanceAcc: 60.5,
-    stateTransitionAcc: 58.9,
-    cost: 6.50,
-    tokens: '45k',
-    tokenNum: 45,
-    latency: 1820,
-    version: 'v1.1',
-    isBest: false,
-    date: '2026-06-20',
-  },
+export interface TelemetryStat {
+  label: string;
+  value: string;
+}
 
-  // --- Qwen Family ---
-  {
-    id: 'qwen2-5-vl-72b',
-    name: 'qwen2.5-vl-72b',
-    family: 'Qwen',
-    provider: 'Qwen',
-    providerColor: 'var(--color-qwen)',
-    mode: 'XHIGH',
-    score: 74.5,
-    confidence: 3.1,
-    topologyF1: 78.4,
-    affordanceAcc: 72.8,
-    stateTransitionAcc: 72.3,
-    cost: 1.45,
-    tokens: '36k',
-    tokenNum: 36,
-    latency: 980,
-    version: 'v1.1',
-    isBest: true,
-    date: '2026-10-08',
-  },
-  {
-    id: 'qwen2-vl-72b',
-    name: 'qwen2-vl-72b',
-    family: 'Qwen',
-    provider: 'Qwen',
-    providerColor: 'var(--color-qwen)',
-    mode: 'HIGH',
-    score: 66.8,
-    confidence: 3.5,
-    topologyF1: 70.8,
-    affordanceAcc: 65.2,
-    stateTransitionAcc: 64.7,
-    cost: 1.60,
-    tokens: '35k',
-    tokenNum: 35,
-    latency: 1150,
-    version: 'v1.1',
-    isBest: false,
-    date: '2026-08-25',
-  },
-  {
-    id: 'qwen2-5-vl-7b',
-    name: 'qwen2.5-vl-7b',
-    family: 'Qwen',
-    provider: 'Qwen',
-    providerColor: 'var(--color-qwen)',
-    mode: 'MEDIUM',
-    score: 62.4,
-    confidence: 3.8,
-    topologyF1: 66.5,
-    affordanceAcc: 61.0,
-    stateTransitionAcc: 60.1,
-    cost: 0.45,
-    tokens: '28k',
-    tokenNum: 28,
-    latency: 520,
-    version: 'v1.1',
-    isBest: false,
-    date: '2026-09-18',
-  },
+// --------------------------------------------------------------- 原始 JSON 类型
 
-  // --- DeepSeek Family ---
-  {
-    id: 'deepseek-vl2-pro',
-    name: 'deepseek-vl2-pro',
-    family: 'DeepSeek',
-    provider: 'DeepSeek',
-    providerColor: 'var(--color-deepseek)',
-    mode: 'XHIGH',
-    score: 73.1,
-    confidence: 3.0,
-    topologyF1: 77.0,
-    affordanceAcc: 71.4,
-    stateTransitionAcc: 70.9,
-    cost: 0.95,
-    tokens: '32k',
-    tokenNum: 32,
-    latency: 890,
-    version: 'v1.1',
-    isBest: true,
-    date: '2026-10-02',
-  },
-  {
-    id: 'deepseek-vl2',
-    name: 'deepseek-vl2',
-    family: 'DeepSeek',
-    provider: 'DeepSeek',
-    providerColor: 'var(--color-deepseek)',
-    mode: 'HIGH',
-    score: 64.8,
-    confidence: 3.7,
-    topologyF1: 68.8,
-    affordanceAcc: 63.5,
-    stateTransitionAcc: 62.9,
-    cost: 0.40,
-    tokens: '25k',
-    tokenNum: 25,
-    latency: 580,
-    version: 'v1.1',
-    isBest: false,
-    date: '2026-09-05',
-  },
-  {
-    id: 'deepseek-janus-pro',
-    name: 'deepseek-janus-pro',
-    family: 'DeepSeek',
-    provider: 'DeepSeek',
-    providerColor: 'var(--color-deepseek)',
-    mode: 'MEDIUM',
-    score: 58.2,
-    confidence: 4.1,
-    topologyF1: 62.1,
-    affordanceAcc: 56.9,
-    stateTransitionAcc: 56.4,
-    cost: 0.30,
-    tokens: '20k',
-    tokenNum: 20,
-    latency: 460,
-    version: 'v1.1',
-    isBest: false,
-    date: '2026-08-10',
-  },
+interface RawModel {
+  id?: unknown;
+  name?: unknown;
+  family?: unknown;
+  provider?: unknown;
+  providerColor?: unknown;
+  mode?: unknown;
+  score?: unknown;
+  compositeScore?: unknown;
+  composite?: unknown;
+  confidence?: unknown;
+  topologyF1?: unknown;
+  affordanceAcc?: unknown;
+  stateTransitionAcc?: unknown;
+  latency?: unknown;
+  metrics?: unknown;
+  version?: unknown;
+  isBest?: unknown;
+  na?: unknown;
+  notes?: unknown;
+}
 
-  // --- Mistral Family ---
-  {
-    id: 'pixtral-large-123b',
-    name: 'pixtral-large',
-    family: 'Mistral',
-    provider: 'Mistral',
-    providerColor: 'var(--color-mistral)',
-    mode: 'HIGH',
-    score: 68.4,
-    confidence: 3.3,
-    topologyF1: 72.1,
-    affordanceAcc: 66.5,
-    stateTransitionAcc: 66.6,
-    cost: 2.30,
-    tokens: '39k',
-    tokenNum: 39,
-    latency: 1220,
-    version: 'v1.1',
-    isBest: true,
-    date: '2026-09-10',
-  },
-  {
-    id: 'pixtral-12b',
-    name: 'pixtral-12b',
-    family: 'Mistral',
-    provider: 'Mistral',
-    providerColor: 'var(--color-mistral)',
-    mode: 'MEDIUM',
-    score: 55.6,
-    confidence: 4.1,
-    topologyF1: 59.8,
-    affordanceAcc: 54.2,
-    stateTransitionAcc: 53.8,
-    cost: 0.50,
-    tokens: '25k',
-    tokenNum: 25,
-    latency: 540,
-    version: 'v1.1',
-    isBest: false,
-    date: '2026-08-15',
-  },
+interface RawLeaderboard {
+  schemaVersion?: unknown;
+  meta?: unknown;
+  models?: unknown;
+}
 
-  // --- Meta Family ---
-  {
-    id: 'llama-3-2-90b-vision',
-    name: 'llama-3.2-90b-v',
-    family: 'Meta',
-    provider: 'Meta',
-    providerColor: 'var(--color-meta)',
-    mode: 'HIGH',
-    score: 58.7,
-    confidence: 4.1,
-    topologyF1: 62.4,
-    affordanceAcc: 57.6,
-    stateTransitionAcc: 56.1,
-    cost: 1.20,
-    tokens: '31k',
-    tokenNum: 31,
-    latency: 990,
-    version: 'v1.1',
-    isBest: true,
-    date: '2026-09-25',
-  },
-  {
-    id: 'llama-3-2-11b-vision',
-    name: 'llama-3.2-11b-v',
-    family: 'Meta',
-    provider: 'Meta',
-    providerColor: 'var(--color-meta)',
-    mode: 'MEDIUM',
-    score: 46.2,
-    confidence: 4.6,
-    topologyF1: 49.8,
-    affordanceAcc: 45.1,
-    stateTransitionAcc: 44.5,
-    cost: 0.35,
-    tokens: '20k',
-    tokenNum: 20,
-    latency: 440,
-    version: 'v1.1',
-    isBest: false,
-    date: '2026-08-20',
-  },
+/** 后端可以写 `{meta, models}`，也兼容只写一个 model 数组。 */
+type RawLeaderboardFile = RawLeaderboard | RawModel[];
 
-  // --- Community Baselines ---
-  {
-    id: 'spatial-vlm-baseline',
-    name: 'spatial-vlm-7b',
-    family: 'Community',
-    provider: 'Community',
-    providerColor: 'oklch(60% 0 0)',
-    mode: '3D-PROJ',
-    score: 62.8,
-    confidence: 3.8,
-    topologyF1: 67.2,
-    affordanceAcc: 64.9,
-    stateTransitionAcc: 56.3,
-    cost: 0.40,
-    tokens: '18k',
-    tokenNum: 18,
-    latency: 610,
-    version: 'v1.1',
-    isBest: true,
-    date: '2026-07-12',
-  },
-  {
-    id: 'internvl-2-5-78b',
-    name: 'internvl-2.5-78b',
-    family: 'Community',
-    provider: 'Community',
-    providerColor: 'oklch(60% 0 0)',
-    mode: 'HIGH',
-    score: 61.2,
-    confidence: 3.9,
-    topologyF1: 65.8,
-    affordanceAcc: 60.1,
-    stateTransitionAcc: 57.7,
-    cost: 1.10,
-    tokens: '35k',
-    tokenNum: 35,
-    latency: 1040,
-    version: 'v1.1',
-    isBest: true,
-    date: '2026-08-05',
-  },
-  {
-    id: 'llava-next-video-34b',
-    name: 'llava-next-video',
-    family: 'Community',
-    provider: 'Community',
-    providerColor: 'oklch(60% 0 0)',
-    mode: 'VIDEO',
-    score: 52.3,
-    confidence: 4.4,
-    topologyF1: 56.0,
-    affordanceAcc: 51.3,
-    stateTransitionAcc: 49.6,
-    cost: 0.85,
-    tokens: '46k',
-    tokenNum: 46,
-    latency: 1350,
-    version: 'v1.1',
-    isBest: true,
-    date: '2026-06-18',
-  },
+// --------------------------------------------------------------- 归一化工具
 
-  // --- v1.0 Legacy results ---
-  {
-    id: 'gemini-1-5-pro-v1',
-    name: 'gemini-1.5-pro',
-    family: 'Google',
-    provider: 'Google',
-    providerColor: 'var(--color-gemini)',
-    mode: 'HIGH',
-    score: 64.2,
-    confidence: 3.5,
-    topologyF1: 68.0,
-    affordanceAcc: 62.1,
-    stateTransitionAcc: 62.5,
-    cost: 2.10,
-    tokens: '42k',
-    tokenNum: 42,
-    latency: 1550,
-    version: 'v1.0',
-    isBest: true,
-    date: '2026-04-12',
-  },
-  {
-    id: 'gpt-4o-v1',
-    name: 'gpt-4o',
-    family: 'OpenAI',
-    provider: 'OpenAI',
-    providerColor: 'var(--color-openai)',
-    mode: 'HIGH',
-    score: 66.8,
-    confidence: 3.4,
-    topologyF1: 70.1,
-    affordanceAcc: 65.4,
-    stateTransitionAcc: 64.9,
-    cost: 3.10,
-    tokens: '38k',
-    tokenNum: 38,
-    latency: 1200,
-    version: 'v1.0',
-    isBest: true,
-    date: '2026-05-10',
-  },
-  {
-    id: 'claude-3-opus-v1',
-    name: 'claude-3-opus',
-    family: 'Anthropic',
-    provider: 'Anthropic',
-    providerColor: 'var(--color-anthropic)',
-    mode: 'MAX',
-    score: 59.3,
-    confidence: 3.9,
-    topologyF1: 63.2,
-    affordanceAcc: 58.7,
-    stateTransitionAcc: 56.0,
-    cost: 5.50,
-    tokens: '34k',
-    tokenNum: 34,
-    latency: 1750,
-    version: 'v1.0',
-    isBest: true,
-    date: '2026-03-22',
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/**
+ * 数值归一化：只接受有限数字（也接受数字字符串）。
+ * 其他一律 null —— null 是"未测量"，不是 0。
+ */
+const toNum = (v: unknown): number | null => {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (typeof v === 'string' && v.trim() !== '') {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
   }
+  return null;
+};
+
+const toStr = (v: unknown, fallback: string): string =>
+  typeof v === 'string' && v.trim() !== '' ? v : fallback;
+
+/**
+ * Backend-generated JSON still carries Chinese display strings. Never edit the
+ * generated files; translate known strings here, and fall back to English
+ * summaries so nothing Chinese can reach the rendered page.
+ */
+const DATA_TEXT_EN: Record<string, string> = {
+  '空间理解与关系推理基准': 'openwsv',
+  '空间理解与关系推理基准（Spatial & Relational Understanding Benchmark）':
+    'openwsv',
+  '综合能力分': 'Overall score',
+  '综合分': 'Overall',
+  '变化识别': 'Change detection',
+  '变化平衡性': 'Change balance',
+  '变化平衡': 'Change balance',
+  '关系类型': 'Relation type',
+  '空间方位': 'Spatial position',
+  '接触支撑': 'Contact & support',
+  '接触/支撑': 'Contact & support',
+  '事件级F1': 'Event F1',
+  '事件级 F1': 'Event F1',
+  '事件F1': 'Event F1',
+  '状态一致性': 'State consistency',
+  '世界状态一致性': 'State consistency',
+  '变化识别 top1': 'Change detection top-1',
+  '变化平衡性 (macroF1)': 'Change balance (macro-F1)',
+  '关系类型准确率': 'Relation type accuracy',
+  '空间方位准确率': 'Spatial position accuracy',
+  '接触/支撑准确率': 'Contact & support accuracy',
+  '7 个维度（0-100）等权平均；缺项自动从分母剔除，不当 0 分':
+    'Equal-weight average of the 7 dimensions (0-100); missing dimensions are dropped from the denominator, not scored as 0.',
+  '总分依赖权重；这里用等权并公开逐维分数，任何人都能按自己的场景重算。':
+    'The total depends on the weights; this board uses equal weights and publishes every dimension so anyone can recompute it for their own setting.',
+  '本次为离线缓存回放（--live 未开启），未发生网络调用':
+    'Offline cached replay (--live was not enabled); no network calls were made.',
+  '云端零样本不输出头级概率分布，头级指标 N/A':
+    'Cloud zero-shot models do not expose head-level probability distributions; head-level metrics are N/A.',
+  '云端输出 schema 不含实体类型，type 维度 N/A':
+    'The cloud output schema has no entity type; the type dimension is N/A.',
+  '预测侧没有实体类型（云端零样本预测只返回 changes/relations，不返回 type）；types 维度仅本地头可测，按 N/A 处理，不参与 state_acc。':
+    'Predictions carry no entity type (cloud zero-shot returns only changes/relations, no type); the types dimension is measurable for local heads only, so it is N/A and excluded from state_acc.',
+};
+
+const HAS_HAN = /[\u4e00-\u9fff]/;
+
+/** Translate a backend display string; never let Han characters through. */
+export const trData = (value: unknown, fallback = 'not available'): string => {
+  if (typeof value !== 'string') return fallback;
+  const text = value.trim();
+  if (!text) return fallback;
+  const mapped = DATA_TEXT_EN[text];
+  if (mapped) return mapped;
+  if (HAS_HAN.test(text)) return fallback;
+  return text;
+};
+
+const FAMILY_COLORS: Record<string, string> = {
+  StarLife: 'var(--color-starlife)',
+  Google: 'var(--color-gemini)',
+  OpenAI: 'var(--color-openai)',
+  Anthropic: 'var(--color-anthropic)',
+  Qwen: 'var(--color-qwen)',
+  DeepSeek: 'var(--color-deepseek)',
+  Mistral: 'var(--color-mistral)',
+  Meta: 'var(--color-meta)',
+  Xiaomi: 'var(--color-xiaomi)',
+  MiniMax: 'var(--color-minimax)',
+  Zhipu: 'var(--color-zhipu)',
+  ByteDance: 'var(--color-bytedance)',
+  Tencent: 'var(--color-tencent)',
+};
+
+const KNOWN_FAMILIES: ModelFamily[] = [
+  'StarLife',
+  'Google',
+  'OpenAI',
+  'Anthropic',
+  'Qwen',
+  'DeepSeek',
+  'Mistral',
+  'Meta',
+  'Xiaomi',
+  'MiniMax',
+  'Zhipu',
+  'ByteDance',
+  'Tencent',
+  'Community',
 ];
 
-export const TASK_EXAMPLES: TaskExample[] = [
-  {
-    id: 'task-3d-occlusion-dag',
-    title: 'Occlusion Graph Recovery under Non-Convex Clutter',
-    description: 'Given 3 calibrated camera angles of a cluttered kitchen counter, reconstruct the directed line-of-sight occlusion DAG for 14 interacting objects.',
-    repoOrDomain: 'openwsv/kitchen-dense-clutter',
-    modality: 'Multi-view',
-    sceneType: 'Indoor Domestic',
-    difficulty: 'Extreme',
-    groundTruthType: 'Adjacency Matrix / DAG',
-    keyVerification: 'Exact topological edge match without illusory depth leaks',
-    samplePrompt: 'Observe the three RGB-D views from Cam_01, Cam_02, and Cam_03. List all ordered pairs (A, B) such that object A partially or completely occludes object B from Cam_01 view, and output the topological occlusion rank vector.'
-  },
-  {
-    id: 'task-robot-arm-reachability',
-    title: 'Embodied 6-DoF Reachability & Collision Prediction',
-    description: 'Determine whether a 6-DoF Franka robotic gripper can execute an approach-and-grasp trajectory on target object without colliding with intervening obstacles.',
-    repoOrDomain: 'openwsv/franka-manipulation',
-    modality: 'RGB-D',
-    sceneType: 'Industrial Robotic Cell',
-    difficulty: 'Hard',
-    groundTruthType: 'Collision Manifold Verification',
-    keyVerification: 'Deterministic physics simulation collision verifier',
-    samplePrompt: 'Based on the point cloud projection and RGB reference, specify whether the gripper path along vector [0.12, -0.45, 0.88] intersects the bounding sphere of the brass cylinder. Output: FEASIBLE | INFEASIBLE with critical obstacle ID.'
-  },
-  {
-    id: 'task-mental-rotation-cad',
-    title: 'Mental Rotation & Symmetry-Invariant Surface Alignment',
-    description: 'Predict the 2D projected contour of an asymmetric mechanical casting when rotated by Euler angles (yaw=135°, pitch=-45°, roll=30°).',
-    repoOrDomain: 'openwsv/cad-topological-solids',
-    modality: '3D Pointcloud',
-    sceneType: 'Precision CAD Geometry',
-    difficulty: 'Hard',
-    groundTruthType: 'Silhouette IoU > 0.88',
-    keyVerification: 'Raytracing intersection match against CAD B-Rep solid',
-    samplePrompt: 'Given the isometric projection of Part_K49, predict which of the 4 candidate silhouette projections correctly matches a rotation around the primary centroidal axis by +135 degrees.'
-  },
-  {
-    id: 'task-temporal-object-constancy',
-    title: 'Dynamic State Tracking across 180° Camera Swivel',
-    description: 'Track object identities and positional permanence as a moving egocentric camera rotates 180°, causing temporary total occlusion of 4 target items.',
-    repoOrDomain: 'openwsv/egocentric-swivel-nav',
-    modality: 'Video Stream',
-    sceneType: 'Living Room Dynamic',
-    difficulty: 'Extreme',
-    groundTruthType: 'Invariant State Tensor',
-    keyVerification: 'Object ID persistence across zero-visibility intervals',
-    samplePrompt: 'At frame 042, the blue notebook is occluded by the opening door. At frame 118 after completing the 180-degree sweep, state the exact 3D spatial coordinates [x, y, z] of the notebook relative to the initial frame reference.'
-  },
-  {
-    id: 'task-gravity-stack-equilibrium',
-    title: 'Contact Physics & Gravity Stability Feasibility',
-    description: 'Analyze an unstable stack of irregular wooden blocks and predict which removal action triggers collapse versus maintaining static mechanical equilibrium.',
-    repoOrDomain: 'openwsv/physics-stability-eval',
-    modality: 'Multi-view',
-    sceneType: 'Tabletop Rigid-Body Physics',
-    difficulty: 'Standard',
-    groundTruthType: 'PhysX / Isaac Sim Ground Truth',
-    keyVerification: 'Rigid body dynamics equilibrium solver',
-    samplePrompt: 'Block D rests on Block B and overhangs by 42% of its length. If Block C is pulled laterally with zero vertical impulse, will the stack remain statically stable? Output YES/NO and the center of mass displacement vector.'
-  },
-  {
-    id: 'task-topological-route-connectivity',
-    title: 'Topological Navigation Connectivity under Blind Zones',
-    description: 'Deduce whether a continuous navigable path exists between Office A and Server Room C given disconnected surveillance camera snapshots with blind zones.',
-    repoOrDomain: 'openwsv/building-topology-graphs',
-    modality: 'Multi-view',
-    sceneType: 'Architectural Floorplan',
-    difficulty: 'Hard',
-    groundTruthType: 'Graph Path Reachability',
-    keyVerification: 'Deterministic Dijkstra topological route validation',
-    samplePrompt: 'Correlate the 4 non-overlapping hallway cameras. Is there a traversable route for a 0.6m wide AGV from Zone_12 to Zone_28 without entering restricted Zone_19?'
-  }
-];
+const toFamily = (v: unknown): ModelFamily =>
+  KNOWN_FAMILIES.includes(v as ModelFamily) ? (v as ModelFamily) : 'Community';
 
-export const METHODOLOGY_POINTS = [
-  {
-    number: '01',
-    title: 'Contamination-Resistant Procedural Twins',
-    subtitle: 'Zero Data Leakage in Pretraining',
-    body: 'Current multimodal benchmarks (like MMBench, RealWorldQA, MMMU) draw from public internet images, YouTube videos, and standard 3D scans that frontier models have already ingested into parameter weights. OpenWSV generates procedural digital-twin topologies with randomized seed permutations and isolated simulation environments.'
-  },
-  {
-    number: '02',
-    title: 'Program-Based Deterministic Verifiers',
-    subtitle: 'No LLM-as-a-Judge Hallucination',
-    body: 'Rather than relying on another LLM to score subjective natural language answers, every OpenWSV submission is evaluated by strict mathematical verifiers: Raytracing bounding intersection, Graph Edit Distance (GED), and rigid-body physical simulators (Isaac Sim / PhysX).'
-  },
-  {
-    number: '03',
-    title: 'Long-Horizon State Tracking',
-    subtitle: 'Beyond Single-Frame 2D Hallucination',
-    body: '2D multimodal models frequently exploit shortcut bias (texture cues, optical flow artifacts, caption co-occurrence) to "guess" relationships. OpenWSV forces models to maintain an internal 3D state tensor that survives viewpoint shifts, partial occlusions, and multi-step action sequences.'
-  },
-  {
-    number: '04',
-    title: 'Frontier Disambiguation',
-    subtitle: 'Separating Capable Reasoning from Visual Guesswork',
-    body: 'On standard public 2D VQA, top frontier models cluster in a narrow 88-92% saturation band. On OpenWSV, top models drop into the 45-82% range with wide spread, exposing foundational gaps in spatial mental simulation.'
+const normalizeMetrics = (v: unknown): ModelMetrics | null => {
+  if (!isRecord(v)) return null;
+  const out: ModelMetrics = {};
+  let hasSection = false;
+  for (const [section, rawSection] of Object.entries(v)) {
+    // 后端把 metrics.state 直接写成数字（state_acc），不是分组对象。
+    if (
+      typeof rawSection === 'number' ||
+      typeof rawSection === 'string' ||
+      Array.isArray(rawSection)
+    ) {
+      const value: MetricSectionValue = Array.isArray(rawSection)
+        ? rawSection.filter(
+            (item): item is number | string =>
+              typeof item === 'number' || typeof item === 'string',
+          )
+        : typeof rawSection === 'number' || typeof rawSection === 'string'
+          ? rawSection
+          : null;
+      out[section] = { [section === 'state' ? 'state_acc' : 'value']: value };
+      hasSection = true;
+      continue;
+    }
+    if (!isRecord(rawSection)) continue;
+    const clean: Record<string, MetricSectionValue> = {};
+    for (const [key, value] of Object.entries(rawSection)) {
+      if (Array.isArray(value)) {
+        clean[key] = value.filter(
+          (item): item is number | string =>
+            typeof item === 'number' || typeof item === 'string',
+        );
+      } else if (typeof value === 'number' || typeof value === 'string') {
+        clean[key] = value;
+      } else if (value === null) {
+        clean[key] = null;
+      }
+      // 嵌套对象（如 per_kind）在前端明细里不展开，直接忽略
+    }
+    if (Object.keys(clean).length > 0) {
+      out[section] = clean;
+      hasSection = true;
+    }
   }
-];
+  return hasSection ? out : null;
+};
+
+const normalizeNa = (v: unknown): Record<string, string> => {
+  if (!isRecord(v)) return {};
+  const out: Record<string, string> = {};
+  for (const [key, reason] of Object.entries(v)) {
+    if (typeof reason === 'string' && reason.trim() !== '') {
+      out[key] = trData(reason, 'not available for this model');
+    }
+  }
+  return out;
+};
+
+// ------------------------------------------------------- 读取生成文件（构建期）
+
+/**
+ * 用 import.meta.glob 而不是静态 import：文件缺失时得到空集而不是构建失败，
+ * 这样空态（"尚无评测结果"）在"后端还没生成文件"时也能渲染。
+ * 文件存在时 eager 引入，等价于 `import file from './leaderboard.generated.json'`。
+ */
+const generatedFiles = import.meta.glob<RawLeaderboardFile>(
+  './leaderboard.generated.json',
+  { eager: true, import: 'default' },
+);
+
+const rawFile: RawLeaderboardFile | undefined = Object.values(generatedFiles)[0];
+
+/** 兼容 `{ models: [...] }` 与裸数组两种顶层结构。 */
+const rawModelList: unknown[] = Array.isArray(rawFile)
+  ? rawFile
+  : Array.isArray(rawFile?.models)
+    ? (rawFile.models as unknown[])
+    : [];
+
+// ------------------------------------------------------------- 榜单模型列表
+
+const normalizeCompositeDim = (raw: unknown): CompositeDim | null => {
+  if (!isRecord(raw)) return null;
+  const key = toStr(raw.key, '') as CompositeDimKey;
+  if (!COMPOSITE_DIM_ORDER.includes(key)) return null;
+  const guide = COMPOSITE_DIM_GUIDE[key];
+  const value = toNum(raw.value);
+  return {
+    key,
+    group: trData(raw.group, guide.group),
+    label: trData(raw.label, guide.group),
+    value: value ?? 0,
+    source: toStr(raw.source, ''),
+    available: typeof raw.available === 'boolean' ? raw.available : value != null,
+  };
+};
+
+/** 综合分构成：7 维、等权权重、缺项自动从分母剔除。缺失/空段 -> null。 */
+const normalizeComposite = (raw: unknown): Composite | null => {
+  if (!isRecord(raw)) return null;
+  const dimsRaw = Array.isArray(raw.dims) ? raw.dims : [];
+  const dims = dimsRaw
+    .map(normalizeCompositeDim)
+    .filter((dim): dim is CompositeDim => dim != null);
+  if (dims.length === 0) return null;
+  const weightsRaw = Array.isArray(raw.weights)
+    ? raw.weights.map(toNum).filter((w): w is number => w != null)
+    : [];
+  return {
+    method: toStr(raw.method, 'equal-weight'),
+    weights: weightsRaw,
+    available: toNum(raw.available) ?? dims.filter((dim) => dim.available).length,
+    total: toNum(raw.total) ?? dims.length,
+    dims,
+  };
+};
+
+/**
+ * 榜单主分：优先综合分；旧版数据没有综合分时回退到可比事件分（明细字段），
+ * 保证后端升级完成前页面仍然可读，而不是整列 N/A。
+ */
+export const primaryScore = (model: ModelResult): number | null =>
+  model.compositeScore ?? model.score;
+
+const bestScore = (() => {
+  const scores: number[] = [];
+  for (const raw of rawModelList) {
+    if (!isRecord(raw)) continue;
+    const score = toNum(raw.compositeScore) ?? toNum(raw.score);
+    if (score != null) scores.push(score);
+  }
+  return scores.length > 0 ? Math.max(...scores) : null;
+})();
+
+const normalizeModel = (raw: RawModel): ModelResult => {
+  const family = toFamily(raw.family);
+  const id = toStr(raw.id, toStr(raw.name, 'unknown-model'));
+  const score = toNum(raw.score);
+  const compositeScore = toNum(raw.compositeScore);
+  const hasBestFlag = typeof raw.isBest === 'boolean';
+  const bestCandidate = compositeScore ?? score;
+  // 颜色以 family 为准（family 是分类口径，颜色只是它的视觉映射）；后端若给了
+  // providerColor 只在 family 未识别（Community/自定义）时作为兜底。
+  const providerColor =
+    FAMILY_COLORS[family] ?? toStr(raw.providerColor, 'var(--color-muted, #8b93a7)');
+  return {
+    id,
+    name: trData(raw.name, id),
+    family,
+    provider: trData(raw.provider, family),
+    providerColor,
+    mode: toStr(raw.mode, '—'),
+    score,
+    compositeScore,
+    composite: normalizeComposite(raw.composite),
+    confidence: toNum(raw.confidence),
+    topologyF1: toNum(raw.topologyF1),
+    affordanceAcc: toNum(raw.affordanceAcc),
+    stateTransitionAcc: toNum(raw.stateTransitionAcc),
+    latency: toNum(raw.latency),
+    metrics: normalizeMetrics(raw.metrics),
+    version: toStr(raw.version, 'v1.1'),
+    isBest: hasBestFlag ? raw.isBest === true : bestCandidate != null && bestCandidate === bestScore,
+    na: normalizeNa(raw.na),
+    notes: normalizeNa(raw.notes),
+  };
+};
+
+export const BENCHMARK_MODELS: ModelResult[] = rawModelList
+  .filter(isRecord)
+  .map((raw) => normalizeModel(raw))
+  .filter((model, index, all) => all.findIndex((m) => m.id === model.id) === index);
+
+export const HAS_RESULTS = BENCHMARK_MODELS.length > 0;
+
+/** 数据里实际出现过的版本，降序（v1.1 在 v1 前）。 */
+export const DATA_VERSIONS: string[] = Array.from(
+  new Set(BENCHMARK_MODELS.map((m) => m.version)),
+).sort((a, b) => b.localeCompare(a));
+
+// -------------------------------------------------------------------- meta
+
+const rawMeta =
+  !Array.isArray(rawFile) && isRecord(rawFile?.meta) ? rawFile.meta : {};
+
+/** 数据契约版本（后端 schemaVersion）；旧文件为 null。 */
+export const SCHEMA_VERSION: number | null = Array.isArray(rawFile)
+  ? null
+  : toNum(rawFile?.schemaVersion);
+
+export const LEADERBOARD_META: LeaderboardMeta = {
+  benchmark: trData(rawMeta.benchmark, BENCHMARK_TITLE),
+  split: toStr(rawMeta.split, '') || null,
+  nPairs: toNum(rawMeta.nPairs),
+  nTestPairs: toNum(rawMeta.nTestPairs),
+  dataset: toStr(rawMeta.dataset, '') || null,
+  checkpoints: toStr(rawMeta.checkpoints, '') || null,
+  sampleSeed: toNum(rawMeta.sampleSeed),
+  generatedAt: toStr(rawMeta.generatedAt, '') || null,
+  sourceRun: toStr(rawMeta.sourceRun, '') || null,
+  composite: (() => {
+    const raw = isRecord(rawMeta.composite) ? rawMeta.composite : null;
+    if (!raw) return null;
+    return {
+      name: trData(raw.name, 'Overall score'),
+      method: toStr(raw.method, 'equal-weight'),
+      dims: toNum(raw.n_dims) ?? toNum(raw.dims) ?? COMPOSITE_DIM_ORDER.length,
+      formula: trData(raw.formula, COMPOSITE_FORMULA_FALLBACK),
+      note: trData(raw.note, ''),
+    };
+  })(),
+};
+
+/** 综合分公式（优先后端 meta.composite.formula，否则用静态兜底文案）。 */
+export const COMPOSITE_FORMULA: string =
+  LEADERBOARD_META.composite?.formula ?? COMPOSITE_FORMULA_FALLBACK;
+
+/** 生成时间的人读格式；不可解析则 null（UI 隐藏而不是写死日期）。 */
+export const GENERATED_AT_LABEL: string | null = (() => {
+  if (!LEADERBOARD_META.generatedAt) return null;
+  const date = new Date(LEADERBOARD_META.generatedAt);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString().slice(0, 10);
+})();
+
+// ---------------------------------------------------------------- telemetry
+
+/**
+ * Hero 顶部的计数：只展示后端提供的真实计数（meta.telemetry），
+ * 取不到的键直接隐藏，不写死。
+ */
+const TELEMETRY_ORDER = ['tasks', 'scenes', 'pairs', 'testPairs', 'models'];
+
+const TELEMETRY_LABELS: Record<string, string> = {
+  tasks: 'Tasks',
+  scenes: 'Scenes',
+  pairs: 'Pairs',
+  testPairs: 'Test pairs',
+  models: 'Models',
+  slots: 'Slots',
+  relations: 'Relations',
+};
+
+export const TELEMETRY_STATS: TelemetryStat[] = (() => {
+  const raw = isRecord(rawMeta.telemetry) ? rawMeta.telemetry : null;
+  if (!raw) return [];
+  const entries = Object.entries(raw).filter(([, value]) => {
+    const n = toNum(value);
+    return n != null;
+  });
+  entries.sort(([a], [b]) => {
+    const ia = TELEMETRY_ORDER.indexOf(a);
+    const ib = TELEMETRY_ORDER.indexOf(b);
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
+  return entries.map(([label, value]) => ({
+    label: TELEMETRY_LABELS[label] ?? label,
+    value: String(toNum(value)),
+  }));
+})();
+
+// ------------------------------------------------------------------ 格式化
+
+export const NA = 'N/A';
+
+export const fmtNumber = (value: number | null | undefined, digits = 2): string =>
+  value == null || !Number.isFinite(value) ? NA : value.toFixed(digits);
+
+export const fmtPct = (value: number | null | undefined, digits = 1): string =>
+  value == null || !Number.isFinite(value) ? NA : `${value.toFixed(digits)}%`;
+
+export const fmtLatency = (value: number | null | undefined): string =>
+  value == null || !Number.isFinite(value) ? NA : `${Math.round(value)}ms`;
+
+/** 明细指标：0–1 比例自动显示成百分比，其余数字保留两位小数。 */
+export const fmtMetricValue = (value: MetricSectionValue | undefined): string => {
+  if (value == null) return NA;
+  if (Array.isArray(value)) return value.length > 0 ? value.join(' / ') : NA;
+  if (typeof value === 'string') return value;
+  if (!Number.isFinite(value)) return NA;
+  return Math.abs(value) <= 1 ? `${(value * 100).toFixed(1)}%` : value.toFixed(2);
+};
+
+// ------------------------------------------------------------ 图表维度支持
+
+/** 运行时指标只有延迟（每事件端到端）。 */
+export type MetricKey = 'latency';
+
+export const METRIC_LABELS: Record<MetricKey, string> = {
+  latency: 'Latency',
+};
+
+export const METRIC_UNAVAILABLE_REASONS: Record<MetricKey, string> = {
+  latency: 'No measured latency',
+};
+
+export const metricValue = (model: ModelResult, metric: MetricKey): number | null => {
+  if (metric === 'latency') return model.latency;
+  return null;
+};
+
+export const hasMetricData = (models: ModelResult[], metric: MetricKey): boolean =>
+  models.some((model) => metricValue(model, metric) != null);
+
+export const firstAvailableMetric = (models: ModelResult[]): MetricKey | null =>
+  hasMetricData(models, 'latency') ? 'latency' : null;
