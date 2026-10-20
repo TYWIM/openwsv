@@ -24,7 +24,7 @@ const releaseLabel = computed(() => {
   if (LEADERBOARD_META.nPairs != null) parts.push(`${LEADERBOARD_META.nPairs} pairs`);
   if (LEADERBOARD_META.dataset) parts.push(LEADERBOARD_META.dataset);
   if (GENERATED_AT_LABEL) parts.push(`generated ${GENERATED_AT_LABEL}`);
-  return parts.length > 0 ? parts.join(' · ') : '尚无评测结果';
+  return parts.length > 0 ? parts.join(' · ') : 'No evaluation results yet';
 });
 </script>
 
@@ -33,7 +33,7 @@ const releaseLabel = computed(() => {
     <div class="max-w-5xl mx-auto px-4 sm:px-6 pt-16 sm:pt-20 pb-12 sm:pb-16">
       <div class="flex items-end justify-between gap-6 border-b border-border pb-7 sm:pb-8">
         <div class="flex flex-col gap-3">
-          <h1 class="text-[40px] sm:text-[56px] leading-none font-medium tracking-tight flex items-center gap-3 sm:gap-4">
+          <h1 class="text-[32px] sm:text-[48px] leading-[1.05] font-medium tracking-tight flex items-center gap-3 sm:gap-4 text-balance">
             <svg
               viewBox="0 0 48 48"
               fill="none"

@@ -37,11 +37,11 @@ const toggleTheme = () => {
 <template>
   <header class="border-b border-border bg-background sticky top-0 z-40 transition-colors">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
-      <div class="flex items-center shrink-0 gap-3">
+      <div class="flex items-center min-w-0 gap-3">
         <a
           href="/"
           class="flex items-center gap-2.5 text-foreground group"
-          aria-label="空间理解与关系推理基准 Home"
+          aria-label="Spatial & Relational Understanding Benchmark home"
         >
           <svg
             class="h-6 w-auto text-foreground shrink-0 transition-transform duration-200 group-hover:scale-105"
@@ -59,8 +59,8 @@ const toggleTheme = () => {
             <line x1="30" y1="10" x2="2" y2="22" />
             <circle cx="16" cy="16" r="2.5" fill="currentColor" />
           </svg>
-          <div class="flex items-baseline gap-1.5">
-            <span class="text-lg sm:text-[20px] font-semibold tracking-[-0.02em] leading-none text-foreground">
+          <div class="flex items-baseline gap-1.5 min-w-0">
+            <span class="truncate text-base sm:text-[20px] font-semibold tracking-[-0.02em] leading-none text-foreground">
               {{ BENCHMARK_TITLE }}
             </span>
             <span class="hidden sm:inline-block text-xs font-mono tracking-widest text-muted-foreground uppercase">
@@ -105,7 +105,7 @@ const toggleTheme = () => {
         </button>
       </nav>
 
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 shrink-0">
         <a
           href="https://github.com/TYWIM/openwsv"
           target="_blank"

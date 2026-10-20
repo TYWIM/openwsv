@@ -15,31 +15,34 @@ interface MetricOption {
 }
 
 const METRICS: MetricOption[] = [
-  { key: 'composite', label: '综合分' },
-  { key: 'change_top1', label: '变化识别' },
-  { key: 'change_balance', label: '变化平衡' },
-  { key: 'relation_type', label: '关系类型' },
-  { key: 'rel_pos', label: '空间方位' },
-  { key: 'attrs', label: '接触支撑' },
-  { key: 'event_f1', label: '事件F1' },
-  { key: 'state_consistency', label: '状态一致性' },
+  { key: 'composite', label: 'Overall' },
+  { key: 'change_top1', label: 'Change detection' },
+  { key: 'change_balance', label: 'Change balance' },
+  { key: 'relation_type', label: 'Relation type' },
+  { key: 'rel_pos', label: 'Spatial position' },
+  { key: 'attrs', label: 'Contact & support' },
+  { key: 'event_f1', label: 'Event F1' },
+  { key: 'state_consistency', label: 'State consistency' },
 ];
 
-/** 图下口径说明：跟随当前指标，逐字固定文案。 */
+/** Fixed notes shown under the chart; follows the active metric. */
 const METRIC_NOTES: Record<MetricKey, string> = {
-  composite: '综合分 = 7 项等权平均（0-100，缺项剔除）；切换上方指标可看各维度单项分数。',
+  composite:
+    "Overall = equal-weight average of the 7 dimensions (0-100, missing dimensions excluded). Switch the tabs above to see each dimension's score.",
   change_top1:
-    '变化识别：两帧之间每个物体发生了什么（出现/消失/被挪动/没变），逐个物体判对的比例；要和「变化平衡」一起看，防止模型全猜"没变"。',
+    'Change detection: for every object, whether it appeared / disappeared / moved / stayed the same — scored object by object. Read it together with Change balance so a model that always answers "no change" cannot score high.',
   change_balance:
-    '变化平衡：变化类别的宏平均 F1（没有变化/出现/位移/消失四类等权）；越接近变化识别分说明各类变化判得越均衡。',
+    'Change balance: macro-average F1 over change classes (no change / appeared / displaced / disappeared, equal weight). The closer it is to Change detection, the more evenly the classes are handled.',
   relation_type:
-    '关系类型：两个物体属于哪一类空间关系（11 类）；必须先匹配到同一对物体，关系类型判对才算对。',
-  rel_pos: '空间方位：在关系类型判对的关系对上，前/后/左/右/上/下说得对不对。',
-  attrs: '接触支撑：关系上「是否接触」「是否互相支撑」两项布尔判断的准确率均值。',
+    'Relation type: which of the 11 spatial relations a pair of objects has. The pair must be matched first; only then can the relation type count as correct.',
+  rel_pos:
+    'Spatial position: on relation pairs whose type is correct, whether front / behind / left / right / above / below is right.',
+  attrs:
+    'Contact & support: accuracy of the two boolean judgements (contact / mutual support) on relations.',
   event_f1:
-    '事件F1：把判断写成结构化事件流后，只统计所有模型都能产出的两类事件，查准率与查全率的调和平均。',
+    'Event F1: after turning predictions into a structured event stream, the harmonic mean of precision and recall over the two event kinds every model can emit.',
   state_consistency:
-    '状态一致性：用预测的变化与关系回放重建 after 帧状态，与真实状态在存在/类型/关系/属性四个维度的一致率均值（类型维度仅本地头有，不计入云端）。',
+    'State consistency: replay predicted changes and relations to rebuild the after-frame state, then measure agreement on presence / type / relations / attributes (type is local-head only and excluded for cloud models).',
 };
 
 const props = withDefaults(
@@ -198,7 +201,7 @@ const legendLabel = (entry: { name: string; count: number }): string =>
     <div
       class="inline-flex max-w-full flex-wrap border border-border bg-background p-0.5"
       role="group"
-      aria-label="选择指标"
+      aria-label="Select metric"
       data-metric-tabs
     >
       <button

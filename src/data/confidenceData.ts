@@ -21,9 +21,24 @@ interface ConfidenceModel {
   intervals: Record<ConfidenceMetricKey, ConfidenceInterval>;
 }
 
-/** 图下口径：逐字固定文案。 */
+/** Fixed note shown under the chart. */
 export const CONFIDENCE_NOTE =
-  '灰色浮动区间 = 95% bootstrap 置信区间（对 60 对重采样 1000 次）；区间重叠时不代表名次确定。';
+  'Grey floating range = 95% bootstrap confidence interval (1,000 resamples of the 60 pairs). Overlapping intervals do not establish a rank difference.';
+
+/** English labels for the backend metricLabels (Chinese keys never reach the UI). */
+const EN_METRIC_LABELS: Record<ConfidenceMetricKey, string> = {
+  composite: 'Overall',
+  change_top1: 'Change detection',
+  change_balance: 'Change balance',
+  relation_type: 'Relation type',
+  rel_pos: 'Spatial position',
+  attrs: 'Contact & support',
+  event_f1: 'Event F1',
+  state_consistency: 'State consistency',
+};
+
+export const confidenceMetricLabel = (key: ConfidenceMetricKey): string =>
+  EN_METRIC_LABELS[key];
 
 const MODEL_INDEX: Map<string, ConfidenceModel> = new Map(
   (raw.models as unknown as ConfidenceModel[]).map((model) => [model.id, model]),

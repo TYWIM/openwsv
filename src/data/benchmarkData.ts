@@ -103,6 +103,8 @@ export interface ModelResult {
   isBest: boolean;
   /** 字段级 N/A 原因（只保留与本基准相关的口径说明，例如 head-level 未测）。 */
   na: Record<string, string>;
+  /** 后端附带的说明文案（已英文化；当前数据为空）。 */
+  notes: Record<string, string>;
 }
 
 /** 综合分的一个维度（数值已经 ×100，0–100）。 */
@@ -177,6 +179,7 @@ interface RawModel {
   version?: unknown;
   isBest?: unknown;
   na?: unknown;
+  notes?: unknown;
 }
 
 interface RawLeaderboard {
@@ -208,6 +211,61 @@ const toNum = (v: unknown): number | null => {
 
 const toStr = (v: unknown, fallback: string): string =>
   typeof v === 'string' && v.trim() !== '' ? v : fallback;
+
+/**
+ * Backend-generated JSON still carries Chinese display strings. Never edit the
+ * generated files; translate known strings here, and fall back to English
+ * summaries so nothing Chinese can reach the rendered page.
+ */
+const DATA_TEXT_EN: Record<string, string> = {
+  '空间理解与关系推理基准': 'Spatial & Relational Understanding Benchmark',
+  '空间理解与关系推理基准（Spatial & Relational Understanding Benchmark）':
+    'Spatial & Relational Understanding Benchmark',
+  '综合能力分': 'Overall score',
+  '综合分': 'Overall',
+  '变化识别': 'Change detection',
+  '变化平衡性': 'Change balance',
+  '变化平衡': 'Change balance',
+  '关系类型': 'Relation type',
+  '空间方位': 'Spatial position',
+  '接触支撑': 'Contact & support',
+  '接触/支撑': 'Contact & support',
+  '事件级F1': 'Event F1',
+  '事件级 F1': 'Event F1',
+  '事件F1': 'Event F1',
+  '状态一致性': 'State consistency',
+  '世界状态一致性': 'State consistency',
+  '变化识别 top1': 'Change detection top-1',
+  '变化平衡性 (macroF1)': 'Change balance (macro-F1)',
+  '关系类型准确率': 'Relation type accuracy',
+  '空间方位准确率': 'Spatial position accuracy',
+  '接触/支撑准确率': 'Contact & support accuracy',
+  '7 个维度（0-100）等权平均；缺项自动从分母剔除，不当 0 分':
+    'Equal-weight average of the 7 dimensions (0-100); missing dimensions are dropped from the denominator, not scored as 0.',
+  '总分依赖权重；这里用等权并公开逐维分数，任何人都能按自己的场景重算。':
+    'The total depends on the weights; this board uses equal weights and publishes every dimension so anyone can recompute it for their own setting.',
+  '本次为离线缓存回放（--live 未开启），未发生网络调用':
+    'Offline cached replay (--live was not enabled); no network calls were made.',
+  '云端零样本不输出头级概率分布，头级指标 N/A':
+    'Cloud zero-shot models do not expose head-level probability distributions; head-level metrics are N/A.',
+  '云端输出 schema 不含实体类型，type 维度 N/A':
+    'The cloud output schema has no entity type; the type dimension is N/A.',
+  '预测侧没有实体类型（云端零样本预测只返回 changes/relations，不返回 type）；types 维度仅本地头可测，按 N/A 处理，不参与 state_acc。':
+    'Predictions carry no entity type (cloud zero-shot returns only changes/relations, no type); the types dimension is measurable for local heads only, so it is N/A and excluded from state_acc.',
+};
+
+const HAS_HAN = /[\u4e00-\u9fff]/;
+
+/** Translate a backend display string; never let Han characters through. */
+export const trData = (value: unknown, fallback = 'not available'): string => {
+  if (typeof value !== 'string') return fallback;
+  const text = value.trim();
+  if (!text) return fallback;
+  const mapped = DATA_TEXT_EN[text];
+  if (mapped) return mapped;
+  if (HAS_HAN.test(text)) return fallback;
+  return text;
+};
 
 const FAMILY_COLORS: Record<string, string> = {
   StarLife: 'var(--color-starlife)',
@@ -295,7 +353,9 @@ const normalizeNa = (v: unknown): Record<string, string> => {
   if (!isRecord(v)) return {};
   const out: Record<string, string> = {};
   for (const [key, reason] of Object.entries(v)) {
-    if (typeof reason === 'string' && reason.trim() !== '') out[key] = reason;
+    if (typeof reason === 'string' && reason.trim() !== '') {
+      out[key] = trData(reason, 'not available for this model');
+    }
   }
   return out;
 };
@@ -331,8 +391,8 @@ const normalizeCompositeDim = (raw: unknown): CompositeDim | null => {
   const value = toNum(raw.value);
   return {
     key,
-    group: toStr(raw.group, guide.group),
-    label: toStr(raw.label, guide.group),
+    group: trData(raw.group, guide.group),
+    label: trData(raw.label, guide.group),
     value: value ?? 0,
     source: toStr(raw.source, ''),
     available: typeof raw.available === 'boolean' ? raw.available : value != null,
@@ -389,9 +449,9 @@ const normalizeModel = (raw: RawModel): ModelResult => {
     FAMILY_COLORS[family] ?? toStr(raw.providerColor, 'var(--color-muted, #8b93a7)');
   return {
     id,
-    name: toStr(raw.name, id),
+    name: trData(raw.name, id),
     family,
-    provider: toStr(raw.provider, family),
+    provider: trData(raw.provider, family),
     providerColor,
     mode: toStr(raw.mode, '—'),
     score,
@@ -406,6 +466,7 @@ const normalizeModel = (raw: RawModel): ModelResult => {
     version: toStr(raw.version, 'v1.1'),
     isBest: hasBestFlag ? raw.isBest === true : bestCandidate != null && bestCandidate === bestScore,
     na: normalizeNa(raw.na),
+    notes: normalizeNa(raw.notes),
   };
 };
 
@@ -432,7 +493,7 @@ export const SCHEMA_VERSION: number | null = Array.isArray(rawFile)
   : toNum(rawFile?.schemaVersion);
 
 export const LEADERBOARD_META: LeaderboardMeta = {
-  benchmark: toStr(rawMeta.benchmark, '空间理解与关系推理基准'),
+  benchmark: trData(rawMeta.benchmark, BENCHMARK_TITLE),
   split: toStr(rawMeta.split, '') || null,
   nPairs: toNum(rawMeta.nPairs),
   nTestPairs: toNum(rawMeta.nTestPairs),
@@ -445,11 +506,11 @@ export const LEADERBOARD_META: LeaderboardMeta = {
     const raw = isRecord(rawMeta.composite) ? rawMeta.composite : null;
     if (!raw) return null;
     return {
-      name: toStr(raw.name, '综合分'),
+      name: trData(raw.name, 'Overall score'),
       method: toStr(raw.method, 'equal-weight'),
       dims: toNum(raw.n_dims) ?? toNum(raw.dims) ?? COMPOSITE_DIM_ORDER.length,
-      formula: toStr(raw.formula, COMPOSITE_FORMULA_FALLBACK),
-      note: toStr(raw.note, ''),
+      formula: trData(raw.formula, COMPOSITE_FORMULA_FALLBACK),
+      note: trData(raw.note, ''),
     };
   })(),
 };
@@ -534,7 +595,7 @@ export const METRIC_LABELS: Record<MetricKey, string> = {
 };
 
 export const METRIC_UNAVAILABLE_REASONS: Record<MetricKey, string> = {
-  latency: '无实测延迟',
+  latency: 'No measured latency',
 };
 
 export const metricValue = (model: ModelResult, metric: MetricKey): number | null => {

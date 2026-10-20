@@ -119,42 +119,42 @@ const modeLabel = (mode: string): string => {
 const modeTitle = (mode: string): string => {
   const normalized = mode.toLowerCase();
   if (normalized === 'local-heads') {
-    return '有监督专用头（local-heads）：在训练集上拟合过，与零样本通用模型不可直接等量齐观。';
+    return 'Supervised dedicated head (local-heads): fitted on the training set, not directly comparable to zero-shot general models.';
   }
   if (normalized === 'zero-shot') {
-    return '零样本通用模型（zero-shot）：直接跑云端 API，没有任何针对本基准的训练。';
+    return 'Zero-shot general model (zero-shot): runs directly against a cloud API, with no training on this benchmark.';
   }
-  return '参赛方式未标注。';
+  return 'Entrant type not specified.';
 };
 
 const latencyTooltip =
-  '每事件端到端延迟（含特征抽取 / API 往返）；云端受网络与输出长度影响。';
+  'End-to-end latency per event (feature extraction / API round-trip); cloud models are affected by network and output length.';
 
 const compositeBarWidth = (value: number | null): string => {
   if (value == null || !Number.isFinite(value)) return '0%';
   return `${Math.min(100, Math.max(0, value))}%`;
 };
 
-/** 权重来源说明：等权时明确写"等权，不预设哪个维度更重要"。 */
+/** Weight source: state explicitly when all dimensions carry equal weight. */
 const weightsLabel = (model: ModelResult): string | null => {
   const weights = model.composite?.weights ?? [];
   if (weights.length === 0) return null;
   const unique = [...new Set(weights.map((w) => w.toFixed(6)))];
   if (unique.length <= 1) {
-    return `${weights.length} × ${unique[0]}（等权，不预设哪个维度更重要）`;
+    return `${weights.length} × ${unique[0]} (equal weights; no dimension is assumed more important)`;
   }
-  return `${weights.map((w) => w.toFixed(4)).join(' / ')}（按权重加权）`;
+  return `${weights.map((w) => w.toFixed(4)).join(' / ')} (weighted by the given weights)`;
 };
 
-/** 维度 tooltip：一句话 + 怎么看 + 口径提醒（rel_pos / state_consistency 的口径放这里）。 */
+/** Dimension tooltip: one-line summary + how to read + scope caveats. */
 const dimTitle = (dim: CompositeDim): string => {
   const guide = COMPOSITE_DIM_GUIDE[dim.key];
-  const lines = [guide.oneLiner, `怎么看：${guide.howToRead}`];
+  const lines = [guide.oneLiner, `How to read: ${guide.howToRead}`];
   if (dim.key === 'rel_pos') {
-    lines.push('口径：只统计关系判定正确后的方位。');
+    lines.push('Scope: only positions on pairs whose relation type was classified correctly.');
   }
   if (dim.key === 'state_consistency') {
-    lines.push('口径：不含实体类别维度。');
+    lines.push('Scope: excludes the entity-type dimension.');
   }
   return lines.join('\n');
 };
@@ -323,20 +323,21 @@ const metricGroups = (model: ModelResult): MetricGroup[] => {
       </button>
     </div>
 
-    <!-- 参赛方式提示：专用头 vs 零样本 -->
+    <!-- Entrant-type notice: dedicated heads vs zero-shot -->
     <p v-if="mixedEntrantTypes" class="text-[12px] leading-relaxed text-muted-foreground">
-      参赛方式有两类：
-      <span class="font-mono text-foreground">local-heads</span>（有监督专用头）与
-      <span class="font-mono text-foreground">zero-shot</span>（零样本通用模型）。
-      两类不可直接等量齐观（专用头见过训练集、零样本没有）；综合分只做同口径汇总，
-      换一组权重云端名次会互换，本地行始终第一，详见 reliability 报告。
+      There are two entrant types:
+      <span class="font-mono text-foreground">local-heads</span> (supervised dedicated heads) and
+      <span class="font-mono text-foreground">zero-shot</span> (zero-shot general models).
+      They are not directly interchangeable (dedicated heads have seen the training set, zero-shot
+      models have not); the composite only aggregates on a common scale. Under a different
+      weighting, cloud ranks can swap while the local row stays first — see the reliability report.
     </p>
 
     <!-- 表格 -->
     <div
       tabindex="0"
       role="region"
-      aria-label="空间理解与关系推理基准 leaderboard table"
+      aria-label="Spatial & Relational Understanding Benchmark leaderboard table"
       class="w-full overflow-x-auto border border-border bg-card"
     >
       <table class="w-full text-left text-xs border-collapse">
@@ -345,7 +346,7 @@ const metricGroups = (model: ModelResult): MetricGroup[] => {
             <th class="py-2.5 pl-4 pr-2 w-12 text-center">#</th>
             <th class="py-2.5 px-3 min-w-[210px]">
               <button type="button" @click="handleSort('name')" class="flex items-center gap-1 hover:text-foreground cursor-pointer font-medium">
-                Model · 参赛模型
+                Model
                 <ArrowUpDown class="size-3" />
               </button>
             </th>
@@ -354,9 +355,9 @@ const metricGroups = (model: ModelResult): MetricGroup[] => {
                 type="button"
                 @click="handleSort('composite')"
                 class="flex items-center gap-1 hover:text-foreground cursor-pointer font-medium"
-                title="7 维等权综合分（0–100）"
+                title="7-dimension equal-weight composite score (0–100)"
               >
-                综合分 · Composite
+                Composite score
                 <ArrowUpDown class="size-3" />
               </button>
             </th>
@@ -434,7 +435,7 @@ const metricGroups = (model: ModelResult): MetricGroup[] => {
                       {{ fmtPct(primaryScore(m)) }}
                     </span>
                     <span class="block text-[10px] text-muted-foreground">
-                      {{ m.composite ? '7 维等权' : '旧版事件分' }}
+                      {{ m.composite ? '7-dim equal weight' : 'Legacy event score' }}
                     </span>
                   </div>
 
@@ -449,7 +450,7 @@ const metricGroups = (model: ModelResult): MetricGroup[] => {
                     />
                   </div>
                   <span v-else class="text-[11px] font-mono text-muted-foreground">
-                    {{ m.na.compositeScore ?? m.na.score ?? '未测' }}
+                    {{ m.na.compositeScore ?? m.na.score ?? 'Not measured' }}
                   </span>
                 </div>
               </td>
@@ -470,19 +471,19 @@ const metricGroups = (model: ModelResult): MetricGroup[] => {
                       Composite score breakdown
                     </div>
                     <p class="mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
-                      <span class="font-mono text-foreground">公式：</span>
+                      <span class="font-mono text-foreground">Formula:</span>
                       {{ COMPOSITE_FORMULA }}
                       <span v-if="m.composite" class="font-mono">
-                        （{{ m.composite.available }}/{{ m.composite.total }} 维可用 · {{ m.composite.method }}）
+                        ({{ m.composite.available }}/{{ m.composite.total }} dimensions available · {{ m.composite.method }})
                       </span>
                     </p>
 
                     <p v-if="m.composite" class="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                      <span class="font-mono text-foreground">权重：</span>{{ weightsLabel(m) }}
+                      <span class="font-mono text-foreground">Weights:</span> {{ weightsLabel(m) }}
                     </p>
                     <p v-if="m.composite" class="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                      综合分依赖权重：换一组权重，云端模型的名次会互换，但本地行始终第一；详见
-                      reliability 报告。
+                      The composite depends on the weights: under a different weighting, cloud ranks
+                      can swap while the local row stays first; see the reliability report.
                     </p>
                     <p v-if="meta.composite?.note" class="mt-1 text-[11px] leading-relaxed text-muted-foreground/80">
                       {{ meta.composite.note }}
@@ -515,13 +516,14 @@ const metricGroups = (model: ModelResult): MetricGroup[] => {
                           {{ COMPOSITE_DIM_GUIDE[dim.key].oneLiner }}
                         </p>
                         <p class="text-[11px] leading-snug text-muted-foreground/80">
-                          <span class="text-foreground/70">怎么看：</span>
+                          <span class="text-foreground/70">How to read:</span>
                           {{ COMPOSITE_DIM_GUIDE[dim.key].howToRead }}
                         </p>
                       </li>
                     </ul>
                     <p v-else class="mt-4 text-[11px] leading-relaxed text-muted-foreground">
-                      该版本数据未提供 7 维综合分构成（旧版 schema），主分回退为可比事件分。
+                      This data version does not provide the 7-dimension composite breakdown (legacy
+                      schema); the primary score falls back to the comparable event score.
                     </p>
                   </div>
 
@@ -560,7 +562,7 @@ const metricGroups = (model: ModelResult): MetricGroup[] => {
                         class="size-3 transition-transform"
                         :class="detailId === m.id ? 'rotate-0' : '-rotate-90'"
                       />
-                      {{ detailId === m.id ? '收起 head/pair/event 明细' : '展开 head/pair/event 明细' }}
+                      {{ detailId === m.id ? 'Hide head/pair/event details' : 'Show head/pair/event details' }}
                     </button>
 
                     <div v-if="detailId === m.id && hasMetrics(m)" class="mt-3 space-y-4">
@@ -603,21 +605,25 @@ const metricGroups = (model: ModelResult): MetricGroup[] => {
       </table>
 
       <div v-if="sortedModels.length === 0" class="p-8 text-center text-muted-foreground text-sm font-mono">
-        {{ allModels.length === 0 ? '尚无评测结果：leaderboard.generated.json 尚未生成或为空。' : 'No models match the current filters.' }}
+        {{ allModels.length === 0 ? 'No evaluation results yet: leaderboard.generated.json has not been generated or is empty.' : 'No models match the current filters.' }}
       </div>
     </div>
 
     <p class="text-[12px] leading-relaxed text-muted-foreground">
-      综合分 = {{ COMPOSITE_FORMULA }}。7 个维度：变化识别 top-1、变化平衡性 macro-F1、
-      关系类别、空间方位、接触/支撑、事件级 F1、世界状态一致性。点开任意一行可看 7 维分数与每维的人话解释；
-      旧的可比事件分与 head / pair / event / state 明细仍保留在展开区，未删除。延迟为每事件端到端
-      （含特征抽取 / API 往返），云端受网络与输出长度影响。N/A 表示该维度没有真实测量值，不会用 0 或占位符代替。
+      Composite score = {{ COMPOSITE_FORMULA }} 7 dimensions: Change detection top-1, Change balance
+      macro-F1, Relation type, Spatial position, Contact &amp; support, Event F1, State consistency.
+      Expand any row to see the 7 dimension scores and a plain-language explanation of each; the legacy
+      comparable event score and the head / pair / event / state details remain available in the
+      expanded area. Latency is end-to-end per event (including feature extraction / API round-trip);
+      cloud numbers are affected by network and output length. N/A means the dimension has no real
+      measurement and is never replaced by 0 or a placeholder.
     </p>
     <p v-if="topTwo" class="text-[12px] leading-relaxed text-muted-foreground">
-      前两名 {{ topTwo.first.name }} / {{ topTwo.second.name }} 的综合分为
-      {{ fmtPct(primaryScore(topTwo.first)) }} : {{ fmtPct(primaryScore(topTwo.second)) }}，
-      差 {{ topTwo.gap.toFixed(1) }} 分，约等于打平。综合分依赖权重——换一组权重，云端模型的名次会
-      互换，但本地行始终第一；详见 reliability 报告。
+      The top two, {{ topTwo.first.name }} / {{ topTwo.second.name }}, score
+      {{ fmtPct(primaryScore(topTwo.first)) }} : {{ fmtPct(primaryScore(topTwo.second)) }},
+      a gap of {{ topTwo.gap.toFixed(1) }} points — effectively a tie. The composite depends on the
+      weights: under a different weighting cloud ranks can swap, while the local row stays first; see
+      the reliability report.
     </p>
   </div>
 </template>

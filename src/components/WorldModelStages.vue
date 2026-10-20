@@ -93,7 +93,7 @@ const emit = defineEmits<{
             <div class="flex items-start gap-2">
               <Info class="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
               <p class="text-[12px] leading-relaxed text-muted-foreground text-pretty">
-                本评测覆盖 ②～⑥；① 作为给定条件（冻结编码器）。
+                This benchmark covers layers ②-⑥; layer ① is given as a fixed condition (frozen encoder).
               </p>
             </div>
           </div>
@@ -105,7 +105,7 @@ const emit = defineEmits<{
             class="inline-flex h-8 items-center gap-1.5 border border-border bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent cursor-pointer"
             @click="emit('navigate', 'leaderboard')"
           >
-            <span>查看综合分榜单</span>
+            <span>View composite leaderboard</span>
             <ArrowRight class="size-3.5 text-muted-foreground" />
           </button>
         </div>
