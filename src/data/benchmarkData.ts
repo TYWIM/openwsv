@@ -218,9 +218,9 @@ const toStr = (v: unknown, fallback: string): string =>
  * summaries so nothing Chinese can reach the rendered page.
  */
 const DATA_TEXT_EN: Record<string, string> = {
-  '空间理解与关系推理基准': 'Spatial & Relational Understanding Benchmark',
+  '空间理解与关系推理基准': 'openwsv',
   '空间理解与关系推理基准（Spatial & Relational Understanding Benchmark）':
-    'Spatial & Relational Understanding Benchmark',
+    'openwsv',
   '综合能力分': 'Overall score',
   '综合分': 'Overall',
   '变化识别': 'Change detection',

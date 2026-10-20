@@ -11,7 +11,7 @@
  * 该文件由 starlife_eval 的 report/leaderboard.py 生成；缺失维度必须为 null（前端渲染 N/A）。
  */
 
-export const BENCHMARK_TITLE = 'Spatial & Relational Understanding Benchmark';
+export const BENCHMARK_TITLE = 'openwsv';
 export const BENCHMARK_SUBTITLE = 'Two-frame spatial & relational reasoning for vision-language models';
 export const BENCHMARK_POSITIONING =
   'Open to any vision-language model: given two frames plus a slot table, the benchmark tests whether a model can output the correct object changes, spatial relations and contact/support judgements, then assemble them into a structured world-state update. StarLife-1-WSV-Lite is just one entrant on the board (a local head), not the whole benchmark.';

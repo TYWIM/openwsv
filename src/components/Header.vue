@@ -125,7 +125,7 @@ const toggleTheme = () => {
         <a
           href="/"
           class="flex items-center gap-2.5 min-w-0 text-foreground group"
-          aria-label="Spatial & Relational Understanding Benchmark home"
+          aria-label="openwsv home"
         >
           <svg
             class="h-6 w-auto shrink-0 text-foreground transition-transform duration-200 group-hover:scale-105"

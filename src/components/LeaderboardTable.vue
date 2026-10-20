@@ -333,7 +333,7 @@ const metricGroups = (model: ModelResult): MetricGroup[] => {
     <div
       tabindex="0"
       role="region"
-      aria-label="Spatial & Relational Understanding Benchmark leaderboard table"
+      aria-label="openwsv leaderboard table"
       class="w-full overflow-x-auto border border-border bg-card"
     >
       <table class="w-full text-left text-xs border-collapse">
