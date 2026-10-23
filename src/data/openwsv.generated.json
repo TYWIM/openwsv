@@ -1,0 +1,217 @@
+{
+  "benchmark": {
+    "name": "OpenWSV",
+    "short": "WSV",
+    "version": "1.0",
+    "framework": "openwsv-1",
+    "updated": "2026-10-23"
+  },
+  "composite": {
+    "label": "综合分",
+    "method": "已出分能力等权平均（当前仅 T1 出分）"
+  },
+  "defaultBoard": "overall",
+  "boards": [
+    {
+      "id": "overall",
+      "label": "综合分",
+      "n": 1612,
+      "note": "= T1 全量（当前唯一出分能力）",
+      "rows": [
+        {
+          "id": "qwen3.8-flash",
+          "label": "qwen3.8-flash",
+          "value": 0.7655,
+          "ci": [0.7444, 0.7854],
+          "coverage": 1.0,
+          "usesHarnessBoxes": false
+        },
+        {
+          "id": "deepseek-flash",
+          "label": "deepseek-flash",
+          "value": 0.7488,
+          "ci": [0.7289, 0.7674],
+          "coverage": 1.0,
+          "usesHarnessBoxes": false
+        },
+        {
+          "id": "glm-5.3-flash",
+          "label": "glm-5.3-flash",
+          "value": 0.7388,
+          "ci": [0.7177, 0.7587],
+          "coverage": 1.0,
+          "usesHarnessBoxes": false
+        },
+        {
+          "id": "minimax-m3.1-flash",
+          "label": "minimax-m3.1-flash",
+          "value": 0.6232,
+          "ci": [0.6002, 0.6468],
+          "coverage": 0.9994,
+          "usesHarnessBoxes": false
+        },
+        {
+          "id": "mimo-v2.6-pro",
+          "label": "mimo-v2.6-pro",
+          "value": 0.5459,
+          "ci": [0.5223, 0.5707],
+          "coverage": 1.0,
+          "usesHarnessBoxes": false
+        }
+      ]
+    },
+    {
+      "id": "t1",
+      "label": "T1 单图空间关系",
+      "n": 1612,
+      "rows": [
+        {
+          "id": "qwen3.8-flash",
+          "label": "qwen3.8-flash",
+          "value": 0.7655,
+          "ci": [0.7444, 0.7854],
+          "coverage": 1.0,
+          "usesHarnessBoxes": false
+        },
+        {
+          "id": "deepseek-flash",
+          "label": "deepseek-flash",
+          "value": 0.7488,
+          "ci": [0.7289, 0.7674],
+          "coverage": 1.0,
+          "usesHarnessBoxes": false
+        },
+        {
+          "id": "glm-5.3-flash",
+          "label": "glm-5.3-flash",
+          "value": 0.7388,
+          "ci": [0.7177, 0.7587],
+          "coverage": 1.0,
+          "usesHarnessBoxes": false
+        },
+        {
+          "id": "minimax-m3.1-flash",
+          "label": "minimax-m3.1-flash",
+          "value": 0.6232,
+          "ci": [0.6002, 0.6468],
+          "coverage": 0.9994,
+          "usesHarnessBoxes": false
+        },
+        {
+          "id": "mimo-v2.6-pro",
+          "label": "mimo-v2.6-pro",
+          "value": 0.5459,
+          "ci": [0.5223, 0.5707],
+          "coverage": 1.0,
+          "usesHarnessBoxes": false
+        }
+      ]
+    },
+    {
+      "id": "t1_relation",
+      "label": "T1 关系子集",
+      "n": 305,
+      "rows": [
+        {
+          "id": "glm-5.3-flash",
+          "label": "glm-5.3-flash",
+          "value": 0.9279,
+          "ci": [0.8984, 0.9541],
+          "coverage": 1.0,
+          "usesHarnessBoxes": false
+        },
+        {
+          "id": "qwen3.8-flash",
+          "label": "qwen3.8-flash",
+          "value": 0.9213,
+          "ci": [0.8918, 0.9476],
+          "coverage": 1.0,
+          "usesHarnessBoxes": false
+        },
+        {
+          "id": "deepseek-flash",
+          "label": "deepseek-flash",
+          "value": 0.9082,
+          "ci": [0.8721, 0.9377],
+          "coverage": 1.0,
+          "usesHarnessBoxes": false
+        },
+        {
+          "id": "minimax-m3.1-flash",
+          "label": "minimax-m3.1-flash",
+          "value": 0.8816,
+          "ci": [0.8454, 0.9178],
+          "coverage": 0.9967,
+          "usesHarnessBoxes": false
+        },
+        {
+          "id": "mimo-v2.6-pro",
+          "label": "mimo-v2.6-pro",
+          "value": 0.8684,
+          "ci": [0.8257, 0.9046],
+          "coverage": 0.9967,
+          "usesHarnessBoxes": false
+        }
+      ]
+    },
+    {
+      "id": "t4",
+      "label": "T4 空间变化",
+      "n": 1000,
+      "state": "pending"
+    },
+    {
+      "id": "t5",
+      "label": "T5 关系变化",
+      "n": 1000,
+      "state": "pending"
+    },
+    {
+      "id": "t6",
+      "label": "T6 状态回放",
+      "n": 1000,
+      "state": "pending"
+    },
+    {
+      "id": "t8",
+      "label": "T8 抽象几何",
+      "n": null,
+      "state": "pending",
+      "note": "仅文本模型参与"
+    }
+  ],
+  "protocol": [
+    { "name": "数据", "value": "openwsv-1 冻结 suite（sha256 随包）" },
+    {
+      "name": "检测器",
+      "value": "GroundingDINO-tiny · 权重 sha256 1a2412ef99bd74bc… · box 0.20 / text 0.20"
+    },
+    { "name": "提示词", "value": "openwsv-1" },
+    { "name": "判分器", "value": "确定性判分 · bootstrap 1,000 次" },
+    { "name": "种子", "value": "split 20261020 · bootstrap 20261022" }
+  ],
+  "datasets": [
+    {
+      "id": "openwsv-t1",
+      "name": "单图空间关系",
+      "n": "1,612 题",
+      "desc": "单图多选，公开数据整理，含 305 题关系子集"
+    },
+    {
+      "id": "openwsv-pairs",
+      "name": "结构化世界状态",
+      "n": "1,000 对（test）",
+      "desc": "自建合成前后帧，GT 含存在性/变化/关系/方位/接触支撑"
+    },
+    {
+      "id": "openwsv-abstract",
+      "name": "抽象几何",
+      "n": "待建",
+      "desc": "旋转/投影/补全，仅文本模型参与"
+    }
+  ],
+  "repro": {
+    "command": "python -m starlife_eval.wsv run --suite spatialmqa --model <id>",
+    "repo": "https://github.com/TYWIM/starlife_eval"
+  }
+}

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue';
-import { Sun, Moon, Github, Menu, X } from 'lucide-vue-next';
-import { BENCHMARK_TITLE } from '../data/benchmarkData';
+import { Github, Menu, X } from 'lucide-vue-next';
+import { BENCHMARK, REPRO } from '../data/openwsv';
 
 const emit = defineEmits<{
   (e: 'navigate', targetId: string): void;
@@ -13,16 +13,12 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'leaderboard', label: 'Leaderboard' },
-  { id: 'tasks', label: 'Judgement Tasks' },
-  { id: 'methodology', label: 'Methodology' },
-  { id: 'protocol', label: 'Protocol' },
+  { id: 'leaderboard', label: '主榜' },
+  { id: 'protocol', label: '评测协议' },
+  { id: 'datasets', label: '数据集' },
+  { id: 'repro', label: '复现' },
 ];
 
-const REPO_URL = 'https://github.com/umr-xiaomai/openwsv';
-const THEME_KEY = 'starlife_theme';
-
-const currentTheme = ref<'dark' | 'light'>('dark');
 const activeSection = ref<string | null>(null);
 const mobileOpen = ref(false);
 const headerRef = ref<HTMLElement | null>(null);
@@ -51,9 +47,6 @@ const onPointerDown = (event: PointerEvent) => {
 };
 
 onMounted(() => {
-  const isDark = document.documentElement.classList.contains('dark');
-  currentTheme.value = isDark ? 'dark' : 'light';
-
   if (typeof IntersectionObserver !== 'undefined') {
     observer = new IntersectionObserver(
       (entries) => {
@@ -71,10 +64,7 @@ onMounted(() => {
         }
         activeSection.value = maxRatio > 0 ? nextActive : null;
       },
-      {
-        rootMargin: '-25% 0px -55% 0px',
-        threshold: [0, 0.1, 0.25, 0.5, 0.75, 1],
-      },
+      { rootMargin: '-25% 0px -55% 0px', threshold: [0, 0.1, 0.25, 0.5, 0.75, 1] },
     );
     for (const item of NAV_ITEMS) {
       const el = document.getElementById(item.id);
@@ -92,43 +82,21 @@ onBeforeUnmount(() => {
   document.removeEventListener('keydown', onKeydown);
   document.removeEventListener('pointerdown', onPointerDown);
 });
-
-const toggleTheme = () => {
-  const nextTheme = currentTheme.value === 'dark' ? 'light' : 'dark';
-  currentTheme.value = nextTheme;
-  try {
-    localStorage.setItem(THEME_KEY, nextTheme);
-    const meta = document.querySelector('meta[name="color-scheme"]');
-    if (nextTheme === 'dark') {
-      document.documentElement.classList.add('dark');
-      if (meta) meta.setAttribute('content', 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      if (meta) meta.setAttribute('content', 'light');
-    }
-  } catch (e) {
-    console.error(e);
-  }
-};
 </script>
 
 <template>
   <header
     ref="headerRef"
-    class="border-b border-border bg-background sticky top-0 z-40 transition-colors"
+    class="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-sm"
   >
     <div
-      class="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4 md:grid md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]"
+      class="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 md:grid md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]"
     >
-      <!-- Left: logo + title (truncated below 1024px) -->
-      <div class="flex items-center min-w-0 gap-3 md:min-w-0">
-        <a
-          href="/"
-          class="flex items-center gap-2.5 min-w-0 text-foreground group"
-          aria-label="openwsv home"
-        >
+      <!-- Left: brand -->
+      <div class="flex min-w-0 items-center gap-3">
+        <a href="#top" class="group flex min-w-0 items-center gap-2.5 text-foreground" aria-label="OpenWSV 首页">
           <svg
-            class="h-6 w-auto shrink-0 text-foreground transition-transform duration-200 group-hover:scale-105"
+            class="h-6 w-auto shrink-0 transition-transform duration-200 group-hover:scale-105"
             viewBox="0 0 32 32"
             fill="none"
             stroke="currentColor"
@@ -143,32 +111,30 @@ const toggleTheme = () => {
             <line x1="30" y1="10" x2="2" y2="22" />
             <circle cx="16" cy="16" r="2.5" fill="currentColor" />
           </svg>
-          <div class="flex items-baseline gap-1.5 min-w-0">
-            <span class="truncate text-base sm:text-[20px] font-semibold tracking-[-0.02em] leading-none text-foreground">
-              {{ BENCHMARK_TITLE }}
+          <div class="flex min-w-0 items-baseline gap-2">
+            <span
+              class="truncate text-[18px] font-semibold leading-none tracking-[-0.02em] text-foreground"
+            >
+              {{ BENCHMARK.name }}
             </span>
-            <span class="hidden xl:inline-block text-xs font-mono tracking-widest text-muted-foreground uppercase">
-              / Benchmark
+            <span class="hidden font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground sm:inline">
+              {{ BENCHMARK.short }}
             </span>
           </div>
         </a>
       </div>
 
-      <!-- Center: desktop navigation with scroll-spy underline -->
-      <nav
-        class="hidden md:flex items-center justify-center gap-1 text-sm md:justify-self-center"
-        aria-label="Main Navigation"
-      >
+      <!-- Center: anchor nav -->
+      <nav class="hidden items-center justify-center gap-1 text-sm md:flex md:justify-self-center" aria-label="页面导航">
         <button
           v-for="item in NAV_ITEMS"
           :key="item.id"
           type="button"
-          data-nav-item
           :data-nav-id="item.id"
-          class="relative h-8 px-3 inline-flex items-center justify-center rounded-md transition-colors cursor-pointer"
+          class="relative inline-flex h-8 cursor-pointer items-center justify-center rounded-md px-3 transition-colors"
           :class="
             isActive(item.id)
-              ? 'bg-accent/40 text-foreground'
+              ? 'bg-accent/50 text-foreground'
               : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
           "
           :aria-current="isActive(item.id) ? 'true' : undefined"
@@ -183,79 +149,69 @@ const toggleTheme = () => {
         </button>
       </nav>
 
-      <!-- Right: GitHub, mobile menu toggle, theme toggle -->
-      <div class="flex items-center justify-end gap-2 shrink-0 md:justify-self-end">
+      <!-- Right: framework chip + repo + mobile toggle -->
+      <div class="flex shrink-0 items-center justify-end gap-2 md:justify-self-end">
+        <span
+          class="hidden h-7 items-center border border-border bg-card px-2 font-mono text-[10px] tracking-wide text-muted-foreground lg:inline-flex"
+          title="冻结框架版本"
+        >
+          {{ BENCHMARK.framework }}
+        </span>
         <a
-          :href="REPO_URL"
+          :href="REPRO.repo"
           target="_blank"
           rel="noopener noreferrer"
-          aria-label="umr-xiaomai/openwsv on GitHub"
-          data-repo-link
-          class="h-8 px-2.5 inline-flex items-center gap-1.5 border border-border bg-background text-foreground hover:bg-accent transition-colors whitespace-nowrap"
+          class="inline-flex h-8 items-center gap-1.5 border border-border bg-background px-2.5 text-foreground transition-colors hover:bg-accent"
+          aria-label="TYWIM/starlife_eval on GitHub"
         >
           <Github class="size-3.5 shrink-0" />
-          <span class="hidden sm:inline text-xs font-medium">openwsv</span>
+          <span class="hidden text-xs font-medium sm:inline">starlife_eval</span>
         </a>
-
         <button
           type="button"
-          data-mobile-menu-toggle
-          class="md:hidden h-8 w-8 inline-flex items-center justify-center border border-border bg-background text-foreground transition-colors hover:bg-accent cursor-pointer"
+          class="inline-flex h-8 w-8 cursor-pointer items-center justify-center border border-border bg-background text-foreground transition-colors hover:bg-accent md:hidden"
           :aria-expanded="mobileOpen"
           aria-controls="mobile-nav"
-          :aria-label="mobileOpen ? 'Close navigation menu' : 'Open navigation menu'"
+          :aria-label="mobileOpen ? '关闭导航' : '打开导航'"
           @click="mobileOpen = !mobileOpen"
         >
           <X v-if="mobileOpen" class="size-4" />
           <Menu v-else class="size-4" />
         </button>
-
-        <button
-          type="button"
-          @click="toggleTheme"
-          class="h-8 w-8 inline-flex items-center justify-center border border-border bg-background hover:bg-accent text-foreground transition-colors cursor-pointer"
-          :aria-label="`Switch to ${currentTheme === 'dark' ? 'light' : 'dark'} mode`"
-        >
-          <Sun v-if="currentTheme === 'dark'" class="size-4 text-foreground transition-transform hover:rotate-45" />
-          <Moon v-else class="size-4 text-foreground transition-transform hover:-rotate-12" />
-        </button>
       </div>
     </div>
 
-    <!-- Mobile panel: nav items + repository link -->
+    <!-- Mobile panel -->
     <div
       v-if="mobileOpen"
       id="mobile-nav"
-      class="md:hidden absolute inset-x-0 top-full z-50 border-b border-border bg-background shadow-lg"
+      class="absolute inset-x-0 top-full z-50 border-b border-border bg-background shadow-lg md:hidden"
     >
-      <nav class="max-w-6xl mx-auto px-4 sm:px-6 py-2" aria-label="Mobile Navigation">
+      <nav class="mx-auto max-w-6xl px-4 py-2 sm:px-6" aria-label="移动端导航">
         <button
           v-for="item in NAV_ITEMS"
           :key="`mobile-${item.id}`"
           type="button"
-          class="w-full text-left px-3 py-2 rounded-md text-sm transition-colors cursor-pointer"
+          class="w-full cursor-pointer rounded-md px-3 py-2 text-left text-sm transition-colors"
           :class="
             isActive(item.id)
-              ? 'bg-accent/40 text-foreground font-medium'
+              ? 'bg-accent/50 font-medium text-foreground'
               : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
           "
           @click="go(item.id)"
         >
           {{ item.label }}
         </button>
-
         <div class="my-2 border-t border-border" aria-hidden="true" />
-
         <a
-          :href="REPO_URL"
+          :href="REPRO.repo"
           target="_blank"
           rel="noopener noreferrer"
-          aria-label="umr-xiaomai/openwsv on GitHub"
-          class="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground transition-colors"
+          class="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
           @click="mobileOpen = false"
         >
           <Github class="size-4 shrink-0" />
-          <span class="truncate text-xs font-medium">openwsv</span>
+          <span class="truncate font-mono text-xs">TYWIM/starlife_eval</span>
         </a>
       </nav>
     </div>
